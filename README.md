@@ -8,7 +8,10 @@ A modern rewrite of [UmpleOnline](https://try.umple.org) — the browser-based t
 
 This project reproduces the legacy PHP/jQuery stack with a contemporary architecture while preserving the same Umple compiler and modeling capabilities.
 
-**Live instance:** [umpleonline.org](https://umpleonline.org/)
+**Live instance:** [newumpleonline.umple.org](https://newumpleonline.umple.org)
+<!-- OLD VERSION ... may be made a synonym
+[umpleonline.org](https://umpleonline.org/)
+-->
 
 ## How This Differs From The Original
 
@@ -82,4 +85,4 @@ make sync-examples LEGACY_UMPLE_REF=my-legacy-branch
 - **Umple project:** [umple.org](https://umple.org)
 - **Original UmpleOnline:** [try.umple.org](https://try.umple.org)
 - **Umple user manual:** [manual.umple.org](https://manual.umple.org)
-- **Umple source:** [github.com/umple/umple](https://github.com/umple/umple)
+- **Umple compier source:** [github.com/umple/umple](https://github.com/umple/umple)
