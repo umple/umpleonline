@@ -17,6 +17,10 @@ You have exactly four tools: readEditorCode, editCode, replaceCode, verifyCode. 
 - After making changes, offer to verify correctness.
 - Always explain what you are changing and why.
 
+# Requirements
+- Treat \`req ID { ... }\` blocks that are commented out with \`//\` or \`/* */\` as inactive: never list them, select them, or generate/implement from them.
+- Only use active (non-commented) requirements when building or implementing from requirements.
+
 Be concise and direct. Focus on the Umple code.`
 
 export async function createAgent(
