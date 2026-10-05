@@ -117,6 +117,7 @@ services:
       - ./data/models:/data/models
     environment:
       - PORT=${CODE_EXEC_PORT:-4401}
+      - STATUS_COMPOSE_PROJECT=${COMPOSE_PROJECT_NAME:-umpleonline-prod}
       - EXECUTION_RUNNER_IMAGE=${CODE_RUNNER_IMAGE:-ghcr.io/umple/umpleonline/code-runner:latest}
       - EXECUTION_RUNNER_AUTO_BUILD=0
     healthcheck:

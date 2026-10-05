@@ -62,6 +62,13 @@ Five services, all containerized with Docker:
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, available commands, and contribution guidelines.
 
+## Operational status
+
+Open **Server status** in the editor footer or visit /status for compiler logs,
+software versions, process and container details, deployment metadata, usage
+counters, collaboration statistics, LSP and execution status.
+See [docs/status.md](docs/status.md) for counter definitions and Docker diagnostics.
+
 ## Bundled Examples
 
 The example picker is driven by committed files under `examples/`, not by runtime fetches from the running app. Refresh that snapshot from the legacy Umple repo with:

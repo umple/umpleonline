@@ -8,6 +8,7 @@ import type {
   CrudSchemaResponse,
   PromoteResponse,
   StatusResponse,
+  StatusSummary,
 } from "./types";
 
 const API_BASE = "/api";
@@ -156,6 +157,15 @@ export const api = {
 
   status(signal?: AbortSignal): Promise<StatusResponse> {
     return request("/status", { signal });
+  },
+
+  statusSummary(signal?: AbortSignal): Promise<StatusSummary> {
+    return request("/status/summary", { signal });
+  },
+
+  async recordVisit(): Promise<void> {
+    const res = await fetch("/api/status/visit", { method: "POST" });
+    if (!res.ok) throw new Error("Could not record visit");
   },
 
   async recordSessionStarted(): Promise<void> {

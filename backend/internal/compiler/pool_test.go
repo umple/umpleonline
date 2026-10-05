@@ -21,7 +21,7 @@ func TestServerCommandUsesConfiguredWorkDir(t *testing.T) {
 	}
 }
 
-func TestPrepareWorkDirClearsCompilerArtifacts(t *testing.T) {
+func TestPrepareWorkDirPreservesHistoricalCommandCount(t *testing.T) {
 	workDir := filepath.Join(t.TempDir(), "compiler")
 	if err := os.MkdirAll(filepath.Join(workDir, compilerTXLDir), 0755); err != nil {
 		t.Fatalf("mkdir txl dir: %v", err)
@@ -43,7 +43,6 @@ func TestPrepareWorkDirClearsCompilerArtifacts(t *testing.T) {
 
 	for _, name := range []string{
 		compilerVersionFilename,
-		compilerCommandCountFilename,
 		compilerTXLDir,
 	} {
 		if _, err := os.Stat(filepath.Join(workDir, name)); !os.IsNotExist(err) {
@@ -51,6 +50,10 @@ func TestPrepareWorkDirClearsCompilerArtifacts(t *testing.T) {
 		}
 	}
 
+	count, err := os.ReadFile(filepath.Join(workDir, compilerCommandCountFilename))
+	if err != nil || string(count) != "1" {
+		t.Fatalf("historical command count was lost: %q, err=%v", count, err)
+	}
 	if _, err := os.Stat(filepath.Join(workDir, "keep.txt")); err != nil {
 		t.Fatalf("expected keep.txt to remain: %v", err)
 	}

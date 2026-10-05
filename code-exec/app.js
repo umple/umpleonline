@@ -4,6 +4,7 @@ const fs = require('fs');
 const DockerExecution = require('./dockerExecution');
 const bodyParser = require('body-parser');
 const path = require('path');
+const { diagnostics } = require('./status');
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }))
@@ -72,9 +73,13 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', requestsInFlight: numberOfRequests });
 });
 
-app.get('/status', (req, res) => {
+app.get('/status', async (req, res) => {
+    const runtime = await diagnostics();
     res.json({
-        status: 'ok',
+        ...runtime,
+        status: runtime.docker.status === 'ok' && runtime.runner.status === 'ok' ? 'ok' : 'degraded',
+        hostname: process.env.HOSTNAME,
+        timeoutSeconds: Number(readConfig().timeoutValue),
         port,
         pid: process.pid,
         uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),

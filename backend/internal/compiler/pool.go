@@ -126,7 +126,7 @@ func (p *Pool) Log() (*CompileResult, error) {
 	}
 	defer conn.Close()
 
-	return sendCommand(conn, "-log")
+	return sendCommandWithTimeout(conn, "-log", 5*time.Second)
 }
 
 func (p *Pool) Status() StatusSnapshot {
@@ -209,7 +209,6 @@ func (p *Pool) prepareWorkDir() error {
 
 	for _, name := range []string{
 		compilerVersionFilename,
-		compilerCommandCountFilename,
 		compilerTXLDir,
 	} {
 		if err := os.RemoveAll(filepath.Join(p.workDir, name)); err != nil {

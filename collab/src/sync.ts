@@ -20,6 +20,7 @@ const gcEnabled = process.env.GC !== 'false' && process.env.GC !== '0'
 
 class WSSharedDoc extends Y.Doc {
   name: string
+  collaborated = false
   conns = new Map<WebSocket, Set<number>>()
   awareness: awarenessProtocol.Awareness
 
@@ -63,12 +64,16 @@ class WSSharedDoc extends Y.Doc {
 // ── Doc registry ────────────────────────────────────────────────
 
 const docs = new Map<string, WSSharedDoc>()
+let sessionsInitiatedSinceStart = 0
+let sessionsCollaboratedSinceStart = 0
+let maxConcurrentCollaborators = 0
 
 function getOrCreateDoc(name: string): WSSharedDoc {
   let doc = docs.get(name)
   if (doc) return doc
   doc = new WSSharedDoc(name)
   docs.set(name, doc)
+  sessionsInitiatedSinceStart += 1
   return doc
 }
 
@@ -138,6 +143,11 @@ export function setupWSConnection(
   conn.binaryType = 'arraybuffer'
   const doc = getOrCreateDoc(opts.docName)
   doc.conns.set(conn, new Set())
+  if (doc.conns.size > 1 && !doc.collaborated) {
+    doc.collaborated = true
+    sessionsCollaboratedSinceStart += 1
+  }
+  maxConcurrentCollaborators = Math.max(maxConcurrentCollaborators, doc.conns.size)
 
   conn.on('message', (raw: ArrayBuffer) => onMessage(conn, doc, new Uint8Array(raw)))
 
@@ -190,5 +200,10 @@ export function getCollabStats() {
     activeRooms: docs.size,
     activeConnections,
     awarenessStates,
+    numberOfActiveUsers: activeConnections,
+    numberOfActiveSessions: docs.size,
+    sessionsInitiatedSinceStart,
+    sessionsCollaboratedSinceStart,
+    maxConcurrentCollaborators,
   }
 }
