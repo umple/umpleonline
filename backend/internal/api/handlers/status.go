@@ -17,27 +17,36 @@ import (
 	"github.com/umple/umpleonline/backend/internal/config"
 )
 
+type statusCompiler interface {
+	Status() compiler.StatusSnapshot
+	Log() (*compiler.CompileResult, error)
+}
+
 type StatusHandler struct {
 	cfg     *config.Config
-	pool    *compiler.Pool
+	pool    statusCompiler
 	client  *http.Client
 	started time.Time
 	mu      sync.Mutex
 
 	sessionsSinceStart int
+	logMu              sync.Mutex
+	logCheckedAt       time.Time
+	logCache           map[string]any
 }
 
 type statusCounters struct {
+	VisitsStarted   int    `json:"visitsStarted"`
 	SessionsStarted int    `json:"sessionsStarted"`
 	UpdatedAt       string `json:"updatedAt,omitempty"`
 }
 
-func NewStatusHandler(cfg *config.Config, pool *compiler.Pool) *StatusHandler {
+func NewStatusHandler(cfg *config.Config, pool statusCompiler) *StatusHandler {
 	return &StatusHandler{
 		cfg:  cfg,
 		pool: pool,
 		client: &http.Client{
-			Timeout: 2 * time.Second,
+			Timeout: 15 * time.Second,
 		},
 		started: time.Now(),
 	}
@@ -65,20 +74,39 @@ func (h *StatusHandler) Status(w http.ResponseWriter, r *http.Request) {
 		overall = "degraded"
 	}
 
-	services := map[string]any{
-		"codeExecution": h.serviceStatus("codeExecution", h.cfg.ExecutionURL),
-		"collaboration": h.serviceStatus("collaboration", h.cfg.CollabURL),
-		"lsp":           h.serviceStatus("lsp", h.cfg.LSPURL),
+	type serviceResult struct {
+		name string
+		data map[string]any
+	}
+	results := make(chan serviceResult, 3)
+	for name, url := range map[string]string{
+		"codeExecution": h.cfg.ExecutionURL, "collaboration": h.cfg.CollabURL, "lsp": h.cfg.LSPURL,
+	} {
+		go func(name, url string) { results <- serviceResult{name, h.serviceStatus(name, url)} }(name, url)
+	}
+	services := map[string]any{}
+	for i := 0; i < 3; i++ {
+		result := <-results
+		services[result.name] = result.data
 	}
 	for _, service := range services {
 		if serviceMap, ok := service.(map[string]any); ok {
-			if serviceMap["status"] == "unreachable" {
+			if serviceMap["status"] != "ok" {
 				overall = "degraded"
 			}
 		}
 	}
 
 	counters := h.counters()
+	if counters["status"] != "ok" {
+		overall = "degraded"
+	}
+	dependencies := dependencyStatus()
+	for _, dependency := range dependencies {
+		if (dependency["name"] == "java" || dependency["name"] == "dot") && dependency["status"] != "ok" {
+			overall = "degraded"
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -103,16 +131,25 @@ func (h *StatusHandler) Status(w http.ResponseWriter, r *http.Request) {
 			"collabURL":      h.cfg.CollabURL,
 			"lspURL":         h.cfg.LSPURL,
 		},
-		"dependencies": dependencyStatus(),
+		"dependencies": dependencies,
 		"checks":       checks,
 		"umplesync":    umplesync,
 		"services":     services,
 		"counters":     counters,
-		"legacy":       h.legacyStatus(),
+		"legacy":       h.operationalStatus(dependencies, services["codeExecution"].(map[string]any)),
+		"summary":      h.summary(umplesync),
 	})
 }
 
 func (h *StatusHandler) RecordSession(w http.ResponseWriter, r *http.Request) {
+	h.recordCounter(w, true)
+}
+
+func (h *StatusHandler) RecordVisit(w http.ResponseWriter, r *http.Request) {
+	h.recordCounter(w, false)
+}
+
+func (h *StatusHandler) recordCounter(w http.ResponseWriter, session bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -122,14 +159,20 @@ func (h *StatusHandler) RecordSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	counters.SessionsStarted++
+	if session {
+		counters.SessionsStarted++
+	} else {
+		counters.VisitsStarted++
+	}
 	counters.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	if err := h.writeCounters(counters); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	h.sessionsSinceStart++
+	if session {
+		h.sessionsSinceStart++
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -205,6 +248,7 @@ func (h *StatusHandler) counters() map[string]any {
 	return map[string]any{
 		"status":                    "ok",
 		"sessionsStartedHistorical": counters.SessionsStarted,
+		"visitsStartedHistorical":   counters.VisitsStarted,
 		"sessionsStartedSinceStart": h.sessionsSinceStart,
 		"updatedAt":                 counters.UpdatedAt,
 	}
@@ -237,7 +281,23 @@ func (h *StatusHandler) writeCounters(counters statusCounters) error {
 		return fmt.Errorf("encode counters: %w", err)
 	}
 
-	return os.WriteFile(h.countersPath(), append(data, '\n'), 0o644)
+	file, err := os.CreateTemp(h.cfg.ModelStorePath, ".status-counters-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if err := file.Chmod(0o644); err != nil {
+		file.Close()
+		return err
+	}
+	if _, err := file.Write(append(data, '\n')); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return os.Rename(file.Name(), h.countersPath())
 }
 
 func (h *StatusHandler) countersPath() string {
@@ -279,6 +339,20 @@ func (h *StatusHandler) fetchJSON(url string, target any) error {
 }
 
 func (h *StatusHandler) umplesyncStatus() map[string]any {
+	// Log commands contribute to JVM counters; share one snapshot across users.
+	h.logMu.Lock()
+	defer h.logMu.Unlock()
+	if h.logCache != nil && time.Since(h.logCheckedAt) < 30*time.Second {
+		return h.logCache
+	}
+	status := h.readUmplesyncStatus()
+	h.logCache = status
+	h.logCheckedAt = time.Now()
+	status["checkedAt"] = h.logCheckedAt.UTC().Format(time.RFC3339)
+	return status
+}
+
+func (h *StatusHandler) readUmplesyncStatus() map[string]any {
 	snapshot := h.pool.Status()
 	status := map[string]any{
 		"status":  "ok",
@@ -300,7 +374,12 @@ func (h *StatusHandler) umplesyncStatus() map[string]any {
 
 	status["log"] = strings.TrimSpace(result.Output)
 	if strings.TrimSpace(result.Errors) != "" {
+		status["status"] = "degraded"
 		status["errors"] = strings.TrimSpace(result.Errors)
+	}
+	if status["log"] == "" {
+		status["status"] = "degraded"
+		status["error"] = "Compiler returned no log output"
 	}
 	return status
 }
@@ -310,9 +389,9 @@ func buildStatus() map[string]any {
 	imageRef := firstPresent(os.Getenv("BACKEND_IMAGE_REF"), os.Getenv("IMAGE_TAG"))
 
 	return map[string]any{
-		"sourceCommit":       firstNonEmpty(os.Getenv("SOURCE_COMMIT"), os.Getenv("GIT_COMMIT"), os.Getenv("GITHUB_SHA"), commitFromImageRef(imageRef), commandOutput("git", "rev-parse", "--short", "HEAD")),
+		"sourceCommit":       firstNonEmpty(os.Getenv("SOURCE_COMMIT"), os.Getenv("GIT_COMMIT"), os.Getenv("GITHUB_SHA"), commitFromImageRef(imageRef), gitOutput("rev-parse", "--short", "HEAD")),
 		"sourceRef":          sourceRef,
-		"sourceRefName":      firstPresent(os.Getenv("SOURCE_REF_NAME"), os.Getenv("GITHUB_REF_NAME"), refNameFromRef(sourceRef), commandOutput("git", "rev-parse", "--abbrev-ref", "HEAD")),
+		"sourceRefName":      firstPresent(os.Getenv("SOURCE_REF_NAME"), os.Getenv("GITHUB_REF_NAME"), os.Getenv("GIT_BRANCH"), refNameFromRef(sourceRef), gitOutput("rev-parse", "--abbrev-ref", "HEAD")),
 		"sourceRefType":      firstPresent(os.Getenv("SOURCE_REF_TYPE"), refTypeFromRef(sourceRef)),
 		"builtAt":            os.Getenv("BUILD_TIME"),
 		"backendImage":       imageRef,
@@ -371,185 +450,67 @@ func dependencyStatus() []map[string]string {
 	return []map[string]string{
 		commandDependency("java", "java", "-version"),
 		commandDependency("dot", "dot", "-V"),
-		commandDependency("gcc", "gcc", "--version"),
-		commandDependency("php", "php", "-v"),
-		commandDependency("docker", "docker", "--version"),
+		commandDependency("python", "python3", "--version"),
 		pathDependency("txlBinary", txlBinaryPath),
 		pathDependency("txlRuntime", txlLibPath),
 	}
 }
 
-func (h *StatusHandler) legacyStatus() map[string]any {
+func (h *StatusHandler) operationalStatus(dependencies []map[string]string, execution map[string]any) map[string]any {
+	snapshot := h.pool.Status()
+	listenerState := "unavailable"
+	if snapshot.Alive {
+		listenerState = "ok"
+	}
+	docker, ok := execution["docker"].(map[string]any)
+	if !ok {
+		docker = map[string]any{"status": "unavailable", "detail": "Execution service did not report Docker diagnostics"}
+	}
 	return map[string]any{
-		"software": legacySoftwareStatus(),
-		"listener": listenerStatus(h.cfg.UmplePort),
-		"docker":   legacyDockerStatus(),
+		"software": dependencies,
+		"listener": map[string]any{"status": listenerState, "port": snapshot.Port, "pid": snapshot.PID},
+		"docker":   docker,
 		"execution": map[string]any{
-			"mainContainerName": firstNonEmpty(os.Getenv("CODE_EXEC_CONTAINER_NAME"), "code-exec"),
-			"tempContainerName": firstNonEmpty(os.Getenv("CODE_RUNNER_IMAGE"), os.Getenv("EXECUTION_RUNNER_IMAGE"), "umple-code-runner:dev"),
-			"port":              h.cfg.ExecutionURL,
-			"timeoutSeconds":    firstNonEmpty(os.Getenv("EXECUTION_TIMEOUT_SECONDS"), "20"),
+			"runnerImage":    execution["runnerImage"],
+			"runner":         execution["runner"],
+			"port":           h.cfg.ExecutionURL,
+			"timeoutSeconds": execution["timeoutSeconds"],
 		},
-		"visits": legacyVisitCounter(),
+		"visits": h.visitStatus(),
 	}
 }
 
-func legacySoftwareStatus() []map[string]string {
-	return []map[string]string{
-		legacyCommand("php", "php", "-v"),
-		legacyCommand("java", "java", "-version"),
-		legacyCommand("dot", "dot", "-V"),
-		legacyCommand("gcc", "gcc", "--version"),
-		legacyCommand("docker", "docker", "--version"),
+func (h *StatusHandler) visitStatus() map[string]any {
+	counters := h.counters()
+	return map[string]any{
+		"status":    counters["status"],
+		"label":     "Editor visits since tracking began in this deployment",
+		"value":     counters["visitsStartedHistorical"],
+		"updatedAt": counters["updatedAt"],
 	}
 }
 
-func legacyCommand(name string, command string, args ...string) map[string]string {
-	result := commandDependency(name, command, args...)
-	if path, err := exec.LookPath(command); err == nil {
-		result["path"] = path
+func gitOutput(args ...string) string {
+	output, ok := commandOutputOK("git", args...)
+	if !ok {
+		return ""
 	}
-	return result
-}
-
-func listenerStatus(port int) map[string]string {
-	result := map[string]string{
-		"port": fmt.Sprint(port),
-	}
-	if _, err := exec.LookPath("lsof"); err != nil {
-		result["status"] = "unavailable"
-		result["detail"] = err.Error()
-		return result
-	}
-
-	output := commandOutput("lsof", "-nP", "-i", fmt.Sprintf(":%d", port), "-sTCP:LISTEN")
-	if output == "" {
-		result["status"] = "unavailable"
-		result["detail"] = "no listening process reported"
-		return result
-	}
-
-	result["status"] = "ok"
-	result["detail"] = output
-	return result
-}
-
-func legacyDockerStatus() map[string]any {
-	type dockerTarget struct {
-		Name       string   `json:"name"`
-		Candidates []string `json:"candidates"`
-	}
-
-	targets := []dockerTarget{
-		{Name: "backend", Candidates: compactStrings(os.Getenv("BACKEND_CONTAINER_NAME"), "umpleonline-prod-backend-1", "umpleonline-dev-backend-1")},
-		{Name: "collaboration", Candidates: compactStrings(os.Getenv("COLLAB_CONTAINER_NAME"), "umpleonline-prod-collab-1", "umpleonline-dev-collab-1")},
-		{Name: "lsp", Candidates: compactStrings(os.Getenv("LSP_CONTAINER_NAME"), "umpleonline-prod-lsp-proxy-1", "umpleonline-dev-lsp-proxy-1")},
-		{Name: "codeExecution", Candidates: compactStrings(os.Getenv("CODE_EXEC_CONTAINER_NAME"), "umpleonline-prod-code-exec-1", "umpleonline-dev-code-exec-1")},
-		{Name: "codeRunner", Candidates: compactStrings(os.Getenv("CODE_RUNNER_CONTAINER_NAME"), "umple-code-runner", os.Getenv("CODE_RUNNER_IMAGE"), os.Getenv("EXECUTION_RUNNER_IMAGE"))},
-	}
-
-	status := map[string]any{
-		"containers": targets,
-		"stats":      []map[string]any{},
-	}
-	if _, err := exec.LookPath("docker"); err != nil {
-		status["status"] = "unavailable"
-		status["detail"] = err.Error()
-		return status
-	}
-
-	records := []map[string]any{}
-	for _, target := range targets {
-		record := map[string]any{
-			"name":       target.Name,
-			"status":     "unavailable",
-			"candidates": target.Candidates,
-		}
-
-		for _, candidate := range target.Candidates {
-			output, ok := commandOutputOK("docker", "container", "stats", "--no-stream", "--format", "json", candidate)
-			if !ok || output == "" {
-				continue
-			}
-
-			stat := map[string]any{}
-			if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &stat); err != nil {
-				record["status"] = "unparsed"
-				record["container"] = candidate
-				record["detail"] = strings.TrimSpace(output)
-				break
-			}
-			record["status"] = "ok"
-			record["container"] = candidate
-			for key, value := range stat {
-				record[key] = value
-			}
-			break
-		}
-		records = append(records, record)
-	}
-
-	status["status"] = "ok"
-	status["stats"] = records
-	return status
-}
-
-func legacyVisitCounter() map[string]string {
-	paths := []string{
-		filepath.Join(".", "countlog.txt"),
-		filepath.Join("..", "countlog.txt"),
-		filepath.Join(os.Getenv("MODEL_STORE_PATH"), "countlog.txt"),
-	}
-	for _, path := range paths {
-		if strings.TrimSpace(path) == "" {
-			continue
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		return map[string]string{
-			"status": "ok",
-			"label":  "visits since October 2018",
-			"value":  strings.TrimSpace(string(data)),
-			"path":   path,
-		}
-	}
-
-	return map[string]string{
-		"status": "unavailable",
-		"label":  "visits since October 2018",
-		"detail": "legacy countlog.txt not found in this deployment",
-	}
-}
-
-func compactStrings(values ...string) []string {
-	seen := map[string]bool{}
-	compacted := []string{}
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" || seen[value] {
-			continue
-		}
-		seen[value] = true
-		compacted = append(compacted, value)
-	}
-	return compacted
+	return output
 }
 
 func commandDependency(name string, command string, args ...string) map[string]string {
-	output := commandOutput(command, args...)
-	if output == "" {
+	output, ok := commandOutputOK(command, args...)
+	if !ok || output == "" {
 		return map[string]string{
 			"name":   name,
 			"status": "unavailable",
+			"detail": output,
 		}
 	}
 
+	path, _ := exec.LookPath(command)
 	return map[string]string{
-		"name":   name,
-		"status": "ok",
-		"detail": output,
+		"name": name, "status": "ok", "detail": output, "path": path,
 	}
 }
 
@@ -567,19 +528,6 @@ func pathDependency(name string, path string) map[string]string {
 		"status": "ok",
 		"detail": path,
 	}
-}
-
-func commandOutput(command string, args ...string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, command, args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil && len(output) == 0 {
-		return ""
-	}
-
-	return strings.TrimSpace(string(output))
 }
 
 func commandOutputOK(command string, args ...string) (string, bool) {

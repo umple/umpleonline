@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
+import { StatusFooter } from './StatusFooter'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { AppToolbar } from './AppToolbar'
 import { AppSidebar } from './Sidebar'
@@ -29,6 +30,13 @@ export function AppShell() {
   useModelFromURL()
   useCollab()
   useTaskRoute()
+  const visitRecorded = useRef(false)
+
+  useEffect(() => {
+    if (visitRecorded.current) return
+    visitRecorded.current = true
+    void api.recordVisit().catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (sessionStorage.getItem(SESSION_COUNTER_KEY)) return
@@ -114,6 +122,7 @@ export function AppShell() {
           </ErrorBoundary>
         </div>
 
+        <StatusFooter />
         <CommandPalette />
         <WelcomeDialog />
         <OnboardingTour />

@@ -125,6 +125,8 @@ function StatusContent({ status }: { status: StatusResponse }) {
   const releaseDetail = shortCommit(release.sourceCommit) || shortCommit(status.build?.sourceCommit) || formatValue(status.build?.sourceRefName);
   const compilerState = formatValue(status.umplesync?.alive) === "true" ? "Running" : "Not running";
   const healthRecords = buildHealthRecords(status);
+  const summary = status.summary;
+
 
   return (
     <div className="flex flex-col gap-4" data-testid="status-dashboard">
@@ -137,10 +139,23 @@ function StatusContent({ status }: { status: StatusResponse }) {
         ]}
       />
 
+      <StatusSection title="Usage & compiler version"
+        description="Visits and browser tab sessions since tracking began in this deployment; compiler totals include monitoring commands"
+        testId="status-usage">
+        <KeyValueTable data={{
+          editorVisits: summary?.visits ?? status.counters?.visitsStartedHistorical ?? "Unavailable",
+          sessionsStartedHistorically: summary?.sessions ?? status.counters?.sessionsStartedHistorical ?? "Unavailable",
+          sessionsStartedSinceBackendStart: status.counters?.sessionsStartedSinceStart ?? "Unavailable",
+          compilerVersion: summary?.compiler.version ?? "Unavailable",
+          commandsSinceCompilerStart: summary?.compiler.commandsSinceStart ?? "Unavailable",
+          commandsRunHistorically: summary?.compiler.commandsHistorical ?? "Unavailable",
+        }} />
+      </StatusSection>
+
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)]">
         <StatusSection
           title="Service health"
-          description="Services, backend checks, and configured software or filesystem dependencies"
+          description="Service health, backend-container software versions and configured filesystem dependencies"
           testId="status-service-health"
         >
           <HealthTable records={healthRecords} />
@@ -168,7 +183,7 @@ function StatusContent({ status }: { status: StatusResponse }) {
 
       <StatusSection
         title="Umplesync compiler"
-        description="Compiler process details and raw output from the umplesync -log command"
+        description="Compiler process, command counts, load, queue and timing details from umplesync -log; snapshots are shared for 30 seconds"
         action={<StatusBadge value={formatValue(status.umplesync?.status)} />}
         testId="status-umplesync"
       >
@@ -178,6 +193,27 @@ function StatusContent({ status }: { status: StatusResponse }) {
           {formatValue(status.umplesync?.log) || "No log output returned."}
         </pre>
       </StatusSection>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <StatusSection title="Collaboration server"
+          description="Active users are connected clients. A session is a room lifetime; a collaborated session has had at least two clients."
+          action={<StatusBadge value={formatValue(status.services?.collaboration?.status)} />}
+          testId="status-collaboration">
+          <KeyValueTable data={status.services?.collaboration} />
+        </StatusSection>
+        <StatusSection title="LSP server"
+          description="Language server proxy uptime, active sessions, rejected connections and process limits"
+          action={<StatusBadge value={formatValue(status.services?.lsp?.status)} />}
+          testId="status-lsp">
+          <KeyValueTable data={status.services?.lsp} />
+        </StatusSection>
+        <StatusSection title="Execution server"
+          description="Code execution requests, concurrency limits, runner image, timeout and Docker availability"
+          action={<StatusBadge value={formatValue(status.services?.codeExecution?.status)} />}
+          testId="status-execution">
+          <KeyValueTable data={withoutKeys(status.services?.codeExecution, ["docker"])} />
+        </StatusSection>
+      </div>
 
       <StatusSection
         title="Diagnostics"
@@ -197,10 +233,12 @@ function StatusContent({ status }: { status: StatusResponse }) {
           <SectionBlock title="Compiler listener">
             <KeyValueTable data={asRecord(legacy.listener)} compact />
           </SectionBlock>
-          <SectionBlock title="Container stats" className="xl:col-span-2">
-            <KeyValueTable data={withoutKeys(legacyDocker, ["stats"])} compact />
+          <SectionBlock title="Containers & resource usage" className="xl:col-span-2">
+            <KeyValueTable data={withoutKeys(legacyDocker, ["stats", "containers"])} compact />
             <Separator className="my-3" />
-            <RecordsTable records={asRecordArray(legacyDocker.stats)} primary="name" />
+            <RecordsTable records={asRecordArray(legacyDocker.containers)} primary="name" />
+            <Separator className="my-3" />
+            <RecordsTable records={asRecordArray(legacyDocker.stats)} primary="Name" />
           </SectionBlock>
           <SectionBlock title="Code execution settings" className="xl:col-span-2">
             <KeyValueTable data={asRecord(legacy.execution)} compact />
@@ -250,7 +288,7 @@ function StatusSection({
   testId?: string;
 }) {
   return (
-    <Card className="gap-4 rounded-lg py-4" data-testid={testId}>
+    <Card className="min-w-0 gap-4 rounded-lg py-4" data-testid={testId}>
       <CardHeader className="gap-1 px-4 sm:px-5">
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
@@ -282,7 +320,11 @@ function buildHealthRecords(status: StatusResponse): HealthRecord[] {
   const services = Object.entries(status.services ?? {}).map(([name, data]) => ({
     group: "Service",
     name: serviceTitle(name),
-    data,
+    data: Object.fromEntries(
+      ["status", "pid", "port", "url", "uptimeSeconds", "nodeVersion", "error"]
+        .filter((key) => data[key] !== undefined)
+        .map((key) => [key, data[key]]),
+    ),
   }));
   const checks = Object.entries(status.checks ?? {}).map(([name, data]) => ({
     group: "Check",
@@ -308,14 +350,12 @@ function withRuntimeToolPurposes(records: Array<Record<string, unknown>>): Array
 
 function runtimeToolPurpose(name: string): string {
   switch (name) {
-    case "php":
-      return "Old UmpleOnline PHP runtime probe; not required by the new app";
     case "java":
       return "Runs umplesync.jar, the Umple compiler service";
     case "dot":
       return "Graphviz renderer for diagram layout output";
-    case "gcc":
-      return "Native C/C++ compiler used by generated-code workflows";
+    case "python":
+      return "Python runtime configured in the backend container";
     case "docker":
       return "Container runtime used for services and isolated code execution";
     default:
@@ -393,7 +433,7 @@ function KeyValueTable({
       <TableBody>
         {entries.map(([key, value]) => (
           <TableRow key={key}>
-            <TableCell className={cn("align-top font-medium text-muted-foreground", compact ? "w-36 py-2" : "w-48")}>
+            <TableCell className={cn("align-top font-medium text-muted-foreground", compact ? "w-2/5 whitespace-normal break-words py-2" : "w-2/5 whitespace-normal break-words sm:w-48")}>
               {labelize(key)}
             </TableCell>
             <TableCell className={cn("max-w-[44rem] whitespace-normal break-words font-mono text-xs", compact && "py-2")}>
@@ -454,7 +494,7 @@ function FormattedValue({ value }: { value: unknown }) {
     return <Badge variant="outline">{value ? "true" : "false"}</Badge>;
   }
   if (value && typeof value === "object") {
-    return <pre className="m-0 whitespace-pre-wrap break-words">{JSON.stringify(value, null, 2)}</pre>;
+    return <pre className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">{JSON.stringify(value, null, 2)}</pre>;
   }
   return <>{formatValue(value)}</>;
 }
