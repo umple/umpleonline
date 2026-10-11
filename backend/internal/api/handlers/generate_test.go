@@ -140,3 +140,30 @@ func TestLockModelWorkspaceBlocksConcurrentAccessForExistingModels(t *testing.T)
 		t.Fatal("second lock did not acquire after the first lock was released")
 	}
 }
+
+func TestGenerateLegacyModel(t *testing.T) {
+	handler, store := newIntegrationGenerateHandler(t)
+	id := "160101legacycompile"
+	dir := store.ModelDir(id)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for name, code := range map[string]string{"model.ump": "use Other.ump;\nclass Legacy {}", "Other.ump": "class Other {}"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(code), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, code := range []string{"use Other.ump;\nclass Legacy {}", "use Other.ump;\nclass Legacy { String name; }"} {
+		res := postGenerate(t, handler, GenerateRequest{
+			ModelID: id, Code: code, Language: "Java", ActiveTabID: "main",
+			Tabs: []apiTab{{ID: "main", Name: "model.ump", Code: code}, {ID: "Other.ump", Name: "Other.ump", Code: "class Other {}"}},
+		})
+		if !strings.Contains(res.GeneratedOutput, "class Legacy") || !strings.Contains(res.GeneratedOutput, "class Other") {
+			t.Fatalf("legacy generation failed: %+v", res)
+		}
+		reopened, err := store.Get(id)
+		if err != nil || !strings.Contains(reopened.Code, code) {
+			t.Fatalf("reopen: %+v, %v", reopened, err)
+		}
+	}
+}

@@ -60,8 +60,12 @@ export const api = {
     return request(`/examples/${encodeURIComponent(id)}`);
   },
 
-  resolveExample(example: string): Promise<ExampleResponse> {
-    return request(`/examples/resolve?example=${encodeURIComponent(example)}`);
+  resolveExample(example: string, signal?: AbortSignal): Promise<ExampleResponse> {
+    return request(`/examples/resolve?example=${encodeURIComponent(example)}`, { signal });
+  },
+
+  loadSource(filename: string, signal?: AbortSignal): Promise<{ code: string }> {
+    return request(`/source?filename=${encodeURIComponent(filename)}`, { signal });
   },
 
   async sync(req: {

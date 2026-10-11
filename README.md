@@ -21,6 +21,8 @@ This project reproduces the legacy PHP/jQuery stack with a contemporary architec
 - Backend, collab, LSP, and code-exec ports can all be remapped from the repo root `.env` when you need to run multiple local stacks side by side.
 - This repo is forward-only. We keep the same compiler capabilities, but we are not preserving the old stack's implementation details or setup flow.
 
+See [model loading and legacy-save import](docs/operations/model-loading.md) for supported URL parameters and migration instructions.
+
 ## Architecture
 
 ```
