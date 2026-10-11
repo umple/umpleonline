@@ -425,3 +425,27 @@ func TestPromote_NonExistent(t *testing.T) {
 		t.Error("expected error promoting non-existent model")
 	}
 }
+
+func TestLegacyDiscoveryRespectsModernModels(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := store.Create("class Modern {}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(store.ModelDir(m.ID), "Other.ump"), []byte("class Other {}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	tabs, err := store.LoadTabs(m.ID)
+	if err != nil || tabs != nil {
+		t.Fatalf("modern file must not be discovered as legacy: %+v, %v", tabs, err)
+	}
+	if err := store.SaveTabs(m.ID, &TabsData{ActiveTabID: "other", Tabs: []TabMeta{{ID: "other", Name: "Other.ump"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.ResolveEntryFile(m.ID); got != "Other.ump" {
+		t.Fatalf("metadata did not win: %s", got)
+	}
+}

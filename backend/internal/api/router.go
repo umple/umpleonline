@@ -63,6 +63,7 @@ func NewRouter(cfg *config.Config, pool *compiler.Pool, store *model.Store, task
 		r.Post("/crud/diagram", crudDiagramH.Render)
 
 		// Models
+		r.Get("/source", handlers.NewRemoteSourceHandler())
 		r.Get("/models/{id}", modelH.Get)
 		r.Post("/models/{id}/promote", modelH.Promote)
 

@@ -76,6 +76,8 @@ export async function generateAndRefresh(
   signal?: AbortSignal,
   targetId?: string,
 ): Promise<{ success: boolean; model: UmpleModel | null }> {
+  if (!urlModelResolved) return { success: false, model: null }
+
   const {
     modelId,
     setModelId,
