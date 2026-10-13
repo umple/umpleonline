@@ -1,3 +1,8 @@
+/**
+ * Maps a click on the class or state diagram to a range in the Umple editor.
+ * The diagram views call this so selecting a class or state selects its source.
+ */
+
 export interface DiagramSelectDetail {
   name: string
   kind: 'node' | 'edge'

@@ -1,3 +1,8 @@
+/**
+ * Object explorer shown when that generate target is selected.
+ * Lists classes, edits instances, and draws the instance diagram from crudStore.
+ */
+
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Loader2, RefreshCw, Download, Upload, Network, X, Dices } from 'lucide-react'
 import { useCrudStore, buildCrudSchemaRequestKey } from '@/stores/crudStore'

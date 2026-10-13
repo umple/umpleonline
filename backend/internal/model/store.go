@@ -1,4 +1,9 @@
+// Package model stores Umple models on disk, one directory per model id.
+// Handlers read and write those directories. A cleanup loop deletes temporary models.
 package model
+
+// The store creates models, reads and writes tabs, and tracks which tab is active.
+// Temporary ids are the ones the cleanup loop is allowed to remove.
 
 import (
 	"crypto/rand"

@@ -1,4 +1,8 @@
+// Package crud turns the compiler's model.json into the schema the object explorer edits.
+// handlers/crud_schema.go calls into this package after a compile. The browser never sees the raw compiler JSON.
 package crud
+
+// The helpers here parse model.json and flatten inheritance, associations, and enums into that schema.
 
 import (
 	"encoding/json"

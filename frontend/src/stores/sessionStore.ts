@@ -1,3 +1,8 @@
+/**
+ * The open model: tabs, Umple text, undo, the current diagram, and the selected generate target.
+ * Most of the editor reads this store. Preferences that should survive a reload live in preferencesStore instead.
+ */
+
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Node, Edge } from "@xyflow/react";

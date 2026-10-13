@@ -1,3 +1,8 @@
+/**
+ * Rewrites state-diagram Umple when the user edits the SVG.
+ * The state adapter in state.ts calls these helpers to rename a state, recolor it, or change a transition.
+ */
+
 import { findDiagramRange } from '../../editor/diagramSelection'
 
 export interface SvgStateTarget {

@@ -1,5 +1,9 @@
 package handlers
 
+// POST /api/sync turns a class-diagram edit into umplesync commands and writes the model back.
+// The canvas calls this for add, remove, rename, move, and association changes. It also
+// clears references umplesync would otherwise leave behind.
+
 import (
 	"encoding/json"
 	"fmt"

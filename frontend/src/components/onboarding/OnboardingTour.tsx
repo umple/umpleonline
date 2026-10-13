@@ -1,3 +1,8 @@
+/**
+ * First-run spotlight tour.
+ * Walks the toolbar and the two panes after WelcomeDialog closes. Motion is dropped when the user prefers reduced motion.
+ */
+
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useEphemeralStore } from '@/stores/ephemeralStore'

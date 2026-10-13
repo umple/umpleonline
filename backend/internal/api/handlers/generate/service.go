@@ -1,4 +1,9 @@
+// Package generate runs Umple code generation for POST /api/generate.
+// Service shells out to the Umple compiler. The other files collect what it wrote and special-case Javadoc.
 package generate
+
+// Service runs one generation: a programming language, Javadoc, or Yuml.
+// The HTTP handler in handlers/compile.go calls Service.Generate.
 
 import (
 	"bytes"

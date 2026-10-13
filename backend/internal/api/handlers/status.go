@@ -1,5 +1,9 @@
 package handlers
 
+// GET /api/status and POST /api/status/session.
+// StatusHandler builds the diagnostics payload the /status page renders: compiler pool, disk, collab, LSP, and code-exec.
+// RecordSession counts one browser session per tab.
+
 import (
 	"context"
 	"encoding/json"

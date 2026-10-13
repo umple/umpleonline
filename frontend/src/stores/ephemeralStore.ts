@@ -1,3 +1,8 @@
+/**
+ * State that lasts for this page view.
+ * Compiler issues, generated output, which panes are open, and the AI diff preview. Nothing here is written to local storage.
+ */
+
 import { create } from 'zustand'
 import type { DiffPreviewState } from '@/ai/editPreview'
 import type { GenerateResponse, GeneratedArtifact, GeneratedCodeFile } from '../api/types'

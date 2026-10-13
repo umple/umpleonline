@@ -1,3 +1,8 @@
+/**
+ * Debounced generation while the user edits.
+ * After a pause it calls the backend and refreshes the diagram or generated code. The Generate menu uses generateAndRefresh directly.
+ */
+
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { selectClassFilterKey, useSessionStore, type DiagramView } from '../stores/sessionStore'

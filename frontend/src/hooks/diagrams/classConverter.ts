@@ -1,3 +1,8 @@
+/**
+ * Turns compiler class JSON and Graphviz layout into React Flow nodes and edges.
+ * useCompiler stores the result on the session so UmpleDiagram can draw it.
+ */
+
 import type { Edge, Node } from '@xyflow/react'
 import type { GvEdgeLayout, GvLayout, GvNodeLayout, Position, StoredLayoutMetadata, UmpleAssociation, UmpleAttribute, UmpleMethod, UmpleModel } from '../../api/types'
 import type { ClassNodeData } from '../../components/diagram/nodes/ClassNode'
