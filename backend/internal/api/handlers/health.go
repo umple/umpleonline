@@ -1,5 +1,8 @@
 package handlers
 
+// GET /api/health checks the compiler jar, TXL, the model directory, and code-exec.
+// Process managers hit this. The /status page uses the richer report from status.go.
+
 import (
 	"encoding/json"
 	"fmt"

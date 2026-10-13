@@ -1,3 +1,8 @@
+/**
+ * React Flow canvas for the editable class diagram.
+ * Structural edits go through useDiagramSync to POST /api/sync. Layout and display options come from the toolbar.
+ */
+
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { usePreferencesStore } from '../../stores/preferencesStore'
 import { useEphemeralStore } from '../../stores/ephemeralStore'

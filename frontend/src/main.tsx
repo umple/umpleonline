@@ -1,3 +1,8 @@
+/**
+ * Browser entry point.
+ * Mounts the router: /status is the diagnostics page, and every other path is the editor.
+ */
+
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'

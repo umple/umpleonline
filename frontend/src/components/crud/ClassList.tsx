@@ -1,3 +1,8 @@
+/**
+ * Class list down the side of the object explorer.
+ * Choosing a class shows its instances in InstanceTable.
+ */
+
 import { cn } from '@/lib/utils'
 import { useCrudStore } from '@/stores/crudStore'
 import type { CrudClass } from '@/api/types'

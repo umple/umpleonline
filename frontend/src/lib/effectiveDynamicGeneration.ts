@@ -1,3 +1,8 @@
+/**
+ * Whether generation should run on each edit right now.
+ * The preference can be on while a code-only canvas still pauses generation. The compiler hook checks this.
+ */
+
 import { useEphemeralStore } from '@/stores/ephemeralStore'
 import { usePreferencesStore } from '@/stores/preferencesStore'
 

@@ -1,3 +1,8 @@
+/**
+ * Click actions for a state diagram: rename, recolor, and edit transitions.
+ * Each action calls stateTransforms.ts to rewrite the Umple, then the editor takes the new text.
+ */
+
 import {
   addSubstateInCode,
   addTransitionInCode,

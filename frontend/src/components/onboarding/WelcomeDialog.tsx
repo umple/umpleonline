@@ -1,3 +1,8 @@
+/**
+ * Dialog shown on the first visit, before the spotlight tour.
+ * Dismissing it is what lets OnboardingTour start.
+ */
+
 import {
   Dialog,
   DialogContent,

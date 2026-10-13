@@ -1,3 +1,8 @@
+/**
+ * Right-click menu for the Umple editor.
+ * Cut, copy, paste, and the other editing commands. UmpleEditor wraps its view with this.
+ */
+
 import { type ReactNode, useCallback } from 'react'
 import { type EditorView } from '@codemirror/view'
 import { undo, redo } from '@codemirror/commands'

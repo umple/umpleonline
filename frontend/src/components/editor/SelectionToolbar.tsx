@@ -1,3 +1,8 @@
+/**
+ * Small prompt that appears when Umple text is selected, and sends that selection to the AI agent.
+ * It reads the selection from ephemeralStore.
+ */
+
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowUp, Lightbulb } from 'lucide-react'

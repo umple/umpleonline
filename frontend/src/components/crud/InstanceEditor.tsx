@@ -1,3 +1,8 @@
+/**
+ * Form for one object in the object explorer.
+ * Edits attributes and associations on the instance held in crudStore.
+ */
+
 import { useMemo, useState, useEffect } from 'react'
 import { useCrudStore, type CrudInstance, assocKey, collectClassAssociations, collectClassInstances, getAssocIds, validateGlobalModel, validateInstance } from '@/stores/crudStore'
 import type { CrudAttribute, CrudAssociation, CrudClass, CrudEnum } from '@/api/types'

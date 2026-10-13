@@ -1,3 +1,8 @@
+/**
+ * Builds the Graphviz DOT for the object-explorer instance diagram.
+ * The browser sends that DOT to POST /api/crud/diagram, which returns SVG.
+ */
+
 import type { CrudAssociation, CrudSchema } from '@/api/types'
 import {
   collectClassAssociations,

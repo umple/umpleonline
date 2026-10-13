@@ -1,3 +1,8 @@
+/**
+ * Mirrors editor tabs into the Yjs document so collaborators share the same files.
+ * Local tab actions and remote updates both go through these helpers.
+ */
+
 import { useEffect } from "react";
 import * as Y from "yjs";
 import { useCollabStore } from "../stores/collabStore";

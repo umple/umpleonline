@@ -1,3 +1,8 @@
+/**
+ * Builds the Umple AI agent: its system prompt and the tool set it may call.
+ * useAgent creates one agent per chat session from the provider the user configured.
+ */
+
 import { ToolLoopAgent, stepCountIs } from 'ai'
 import type { AiProvider } from '@/stores/preferencesStore'
 import { getModel } from './provider'

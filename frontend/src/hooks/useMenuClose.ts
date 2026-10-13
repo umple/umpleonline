@@ -1,3 +1,8 @@
+/**
+ * Closes a floating menu on an outside click or Escape.
+ * The diagram context menus use this while they are open.
+ */
+
 import { useEffect, type RefObject } from 'react'
 
 /**

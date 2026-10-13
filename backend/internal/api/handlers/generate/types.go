@@ -1,5 +1,8 @@
 package generate
 
+// These are the request and response types for code generation, and the languages the API accepts.
+// Service and the POST /api/generate handler share these types.
+
 import "strings"
 
 type GenerateRequest struct {

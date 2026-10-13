@@ -1,5 +1,8 @@
 package handlers
 
+// ExampleHandler serves the example menu: the set list, one example's Umple, and legacy URL aliases.
+// Examples come from a manifest synced out of the main Umple repository.
+
 import (
 	"crypto/sha1"
 	"encoding/json"

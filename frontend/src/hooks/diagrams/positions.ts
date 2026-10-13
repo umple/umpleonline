@@ -1,3 +1,8 @@
+/**
+ * Places class-diagram nodes from Graphviz coordinates, or on a grid when no layout came back.
+ * classConverter.ts calls this while it builds the React Flow graph.
+ */
+
 import type { GvEdgeLayout, GvLayout } from '../../api/types'
 
 export interface DiagramNodeMetrics {

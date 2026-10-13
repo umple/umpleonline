@@ -1,3 +1,8 @@
+/**
+ * Sends a class-diagram edit to POST /api/sync and applies the Umple text that comes back.
+ * UmpleDiagram calls this for structural changes. The compiler hook then refreshes the drawing.
+ */
+
 import { useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'

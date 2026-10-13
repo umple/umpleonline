@@ -1,3 +1,8 @@
+/**
+ * Random display name and color for a collaborator's cursor.
+ * useCollab sends this identity with the Yjs awareness state.
+ */
+
 const ADJECTIVES = [
   'Amber', 'Azure', 'Coral', 'Crimson', 'Ember', 'Golden', 'Jade', 'Maple',
   'Misty', 'Ocean', 'Pearl', 'Rusty', 'Sandy', 'Silver', 'Sunny', 'Violet',

@@ -1,3 +1,8 @@
+/**
+ * Compact waiting indicator for the AI panel: a cycling glyph plus a random verb.
+ * It honors prefers-reduced-motion. The streaming row in AgentPanel uses UmpleSpinner instead.
+ */
+
 import { useState, useEffect, useRef } from 'react'
 import { SPINNER_VERBS } from '../../constants/spinnerVerbs'
 import { usePrefersReducedMotion } from '@/hooks/useReducedMotion'

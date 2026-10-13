@@ -1,3 +1,8 @@
+/**
+ * Select and add-class tools for the editable class diagram.
+ * UmpleDiagram shows these while the canvas can create classes.
+ */
+
 import { useState, useCallback } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { ZoomIn, ZoomOut, Maximize, MousePointer2, Plus } from 'lucide-react'

@@ -1,3 +1,8 @@
+/**
+ * On load, opens the model or example named in the query string, and keeps the model id in the URL.
+ * AppShell calls this once. Legacy diagramtype and readOnly parameters are honored here too.
+ */
+
 import { useEffect, useRef } from "react";
 import { useSessionStore } from "../stores/sessionStore";
 import { useCollabStore } from "../stores/collabStore";

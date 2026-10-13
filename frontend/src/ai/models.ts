@@ -1,3 +1,8 @@
+/**
+ * Model list for the selected AI provider.
+ * AiConfigForm calls fetchModels. Each provider's adapter lives next to this file.
+ */
+
 import type { AiProvider } from '@/stores/preferencesStore'
 
 export interface ModelInfo {

@@ -1,3 +1,8 @@
+/**
+ * Right-hand pane when the generate target is source code.
+ * One tab per generated file, plus copy and download. The message pane still holds compiler warnings.
+ */
+
 import { useCallback, useState } from 'react'
 import type { GeneratedArtifact, GeneratedCodeFile } from '../../api/types'
 import { CodeOutput } from './CodeOutput'

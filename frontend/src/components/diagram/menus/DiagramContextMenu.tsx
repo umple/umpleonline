@@ -1,3 +1,8 @@
+/**
+ * Context menu for empty canvas on the class diagram.
+ * Adds a class at the clicked point, or fits every class into view.
+ */
+
 import { useCallback, useRef } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { Plus, Maximize } from 'lucide-react'

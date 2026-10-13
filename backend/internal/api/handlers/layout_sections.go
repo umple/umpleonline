@@ -1,5 +1,8 @@
 package handlers
 
+// These helpers split an Umple file into editable source and the hidden layout section after the end-of-model marker.
+// The editor shows only the source. Sync keeps the layout section so umplesync can round-trip positions.
+
 import (
 	"regexp"
 	"slices"

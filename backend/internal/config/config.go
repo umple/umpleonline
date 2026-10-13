@@ -1,3 +1,5 @@
+// Package config reads the process environment into the settings the server, compiler pool, and proxies share.
+// cmd/server/main.go calls Load once at startup.
 package config
 
 import (

@@ -1,3 +1,8 @@
+/**
+ * Curated MiniMax model list for the AI settings form.
+ * MiniMax has no models endpoint we can list, so the ids here are fixed.
+ */
+
 import type { ModelInfo } from '../models'
 
 /** Minimax exposes an Anthropic-compatible API; model list is curated. */

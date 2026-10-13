@@ -1,3 +1,8 @@
+/**
+ * React hook that runs an Umple AI chat.
+ * AgentPanel calls this. Messages stream from the provider and tool calls edit the editor through tools.ts.
+ */
+
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Chat, useChat } from '@ai-sdk/react'
 import {
