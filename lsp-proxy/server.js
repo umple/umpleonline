@@ -1,3 +1,8 @@
+/**
+ * One umple-lsp-server process per editor WebSocket.
+ * The CodeMirror client in frontend/src/codemirror/lsp.ts connects here. /status reports the proxy to the diagnostics page.
+ */
+
 "use strict";
 
 const { WebSocketServer } = require("ws");

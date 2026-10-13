@@ -1,3 +1,8 @@
+/**
+ * HTTP service that runs a generated program.
+ * The Go execute handler calls POST /run. /health and /status feed the diagnostics page.
+ */
+
 const express = require('express');
 const http = require('http');
 const fs = require('fs');
