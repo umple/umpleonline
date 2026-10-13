@@ -1,3 +1,8 @@
+/**
+ * Sidebar block for the teaching task loaded from a /tasks link.
+ * Opens TaskSheet. Hidden when no task is loaded.
+ */
+
 import { useState } from 'react'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'

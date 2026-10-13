@@ -1,3 +1,8 @@
+/**
+ * Shared types for SVG diagram adapters: a click target, a menu action, and the adapter interface.
+ * state.ts implements SvgDiagramAdapter. SmartSvgView only depends on this interface.
+ */
+
 import type { DiagramView } from '@/constants/diagram'
 export interface SvgInteractionTarget {
   kind: 'node' | 'edge'

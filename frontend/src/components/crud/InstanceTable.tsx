@@ -1,3 +1,8 @@
+/**
+ * Table of instances for the class selected in the object explorer.
+ * Rows come from crudStore. Opening a row edits it in InstanceEditor.
+ */
+
 import { useState } from 'react'
 import { Plus, Pencil, Trash2, Trash, ChevronRight, ChevronDown } from 'lucide-react'
 import { useCrudStore, type CrudInstance, assocKey, getAssocIds, classHasCompositionChildren, collectClassAssociations, collectClassInstances } from '@/stores/crudStore'

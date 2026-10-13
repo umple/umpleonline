@@ -1,3 +1,8 @@
+/**
+ * Text box at the bottom of the AI panel.
+ * Submits a prompt and can stop a response that is still streaming.
+ */
+
 import { useRef, useEffect, type KeyboardEvent } from 'react'
 import { ArrowUp, Square, X } from 'lucide-react'
 import { cn } from '@/lib/utils'

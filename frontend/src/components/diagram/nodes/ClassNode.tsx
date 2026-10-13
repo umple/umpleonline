@@ -1,3 +1,8 @@
+/**
+ * One class box on the editable class diagram, including its attributes and connection handles.
+ * UmpleDiagram registers this as the React Flow node type.
+ */
+
 import { memo, useCallback } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { X } from 'lucide-react'

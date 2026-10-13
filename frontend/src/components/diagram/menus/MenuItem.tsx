@@ -1,3 +1,8 @@
+/**
+ * One row inside a diagram context menu.
+ * The class, edge, and canvas menus share this so items look the same.
+ */
+
 interface MenuItemProps {
   onClick: () => void
   icon: React.ReactNode

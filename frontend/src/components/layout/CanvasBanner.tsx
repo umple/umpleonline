@@ -1,3 +1,8 @@
+/**
+ * Header of the right-hand pane.
+ * Shows which output is open, hosts that output's controls, and toggles a layout that hides the editor.
+ */
+
 import { type ReactNode, useEffect } from 'react'
 import { useEphemeralStore } from '../../stores/ephemeralStore'
 import { useSessionStore } from '../../stores/sessionStore'

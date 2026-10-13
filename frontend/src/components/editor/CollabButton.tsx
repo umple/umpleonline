@@ -1,3 +1,8 @@
+/**
+ * Toolbar control that starts or joins a collaboration room and shows who else is in it.
+ * It writes the room onto collabStore. useCollab opens the socket from there.
+ */
+
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Users, Copy, Check, LogOut } from 'lucide-react'
 import { useCollabStore } from '../../stores/collabStore'
