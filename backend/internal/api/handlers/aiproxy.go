@@ -1,5 +1,8 @@
 package handlers
 
+// AIProxyHandler forwards browser AI requests to an allowlisted provider.
+// It is mounted at /api/ai. The browser still sends the API key; this hop is what the provider sees as the caller.
+
 import (
 	"log"
 	"net/http"

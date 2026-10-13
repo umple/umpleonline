@@ -1,5 +1,8 @@
 package handlers
 
+// buildTransientClassDiagramOverlay writes a temporary Umple copy with class-diagram filter, mixset, and separator directives applied.
+// diagram.go compiles that copy so the canvas can hide classes without rewriting the user's text.
+
 import (
 	"fmt"
 	"os"

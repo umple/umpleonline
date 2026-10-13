@@ -1,5 +1,8 @@
 package handlers
 
+// GET /api/generated/{modelId}/... serves files the compiler wrote for that model.
+// Generated HTML references images this way. The path is checked so a request cannot leave the model directory.
+
 import (
 	"net/http"
 	"os"

@@ -1,5 +1,8 @@
 package generate
 
+// These helpers prepare generated Java so javadoc can run, and shorten javadoc's console output for the message pane.
+// Service calls this when the generate target is Javadoc.
+
 import (
 	"fmt"
 	"io/fs"

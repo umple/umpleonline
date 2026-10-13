@@ -1,5 +1,8 @@
 package handlers
 
+// POST /api/export. Builds a downloadable diagram.
+// Graphviz formats go through dot. Yuml, Mermaid, and the other text formats go through umplesync.
+
 import (
 	"encoding/json"
 	"fmt"

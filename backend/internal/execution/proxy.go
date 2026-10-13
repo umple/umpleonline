@@ -1,3 +1,5 @@
+// Package execution forwards a run request to the code-exec service.
+// The execute handler calls Proxy after the model has been compiled.
 package execution
 
 import (

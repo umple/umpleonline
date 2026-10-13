@@ -1,4 +1,8 @@
+// Package compiler keeps TCP connections to umplesync.jar.
+// API handlers submit compile and diagram commands through Pool and do not talk to the jar directly.
 package compiler
+
+// Pool starts the jar, runs a command, and locks one model's workspace so two edits cannot interleave.
 
 import (
 	"fmt"
