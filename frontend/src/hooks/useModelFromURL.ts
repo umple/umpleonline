@@ -13,6 +13,7 @@ const initialParams = new URLSearchParams(window.location.search);
 /** The URL model param read once at module load — before any React effect. */
 const initialUrlModelId = initialParams.get("model");
 const initialUrlExample = initialParams.get("example");
+const initialUrlText = initialParams.get("text");
 
 /** Legacy ?diagramtype= param (GvClass, state, etc.). */
 const initialDiagramType = initialParams.get("diagramtype");
@@ -39,14 +40,15 @@ function readStoredModelId(): string | null {
 }
 
 const initialStoreModelId =
-  initialUrlModelId || initialUrlExample ? null : readStoredModelId();
+  initialUrlModelId || initialUrlExample || initialUrlText ? null : readStoredModelId();
 
 /** The model ID to restore on mount — URL takes priority over sessionStorage. */
 const initialModelId = initialUrlModelId ?? initialStoreModelId;
 
 /** True when any startup loading (model or example) needs to resolve first. */
-const needsResolve = !!(initialModelId || initialUrlExample);
-
+const needsResolve = !!(
+  initialModelId || initialUrlExample || initialUrlText !== null
+);
 /**
  * True once the initial model (from URL or sessionStorage) has been
  * resolved. Exported so useCompiler can defer compilation until the server
@@ -101,6 +103,20 @@ export function useModelFromURL() {
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (initialUrlText === null || initialUrlExample || initialUrlModelId) {
+      return;
+    }
+
+    setCode(initialUrlText);
+    urlModelResolved = true;
+    resolvedRef.current = true;
+
+    useSessionStore.setState((s) => ({
+      tabsVersion: s.tabsVersion + 1,
+    }));
+  }, [setCode]);
 
   useEffect(() => {
     if (!initialUrlExample) return;
