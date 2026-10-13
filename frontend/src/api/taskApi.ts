@@ -1,3 +1,8 @@
+/**
+ * Browser client for the teaching-task routes.
+ * The task sheet and useTaskRoute call taskApi. Responses match the types in types.ts.
+ */
+
 import { request } from './client'
 import type {
   TaskView, CreateTaskRequest, UpdateTaskRequest,

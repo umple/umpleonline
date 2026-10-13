@@ -1,3 +1,8 @@
+/**
+ * Extensions shared by every Umple editor.
+ * Basic editing, tab-to-indent, the Umple language, and the syntax theme. UmpleEditor and the diff editor both call this.
+ */
+
 import { basicSetup } from 'codemirror'
 import { keymap } from '@codemirror/view'
 import { indentWithTab } from '@codemirror/commands'

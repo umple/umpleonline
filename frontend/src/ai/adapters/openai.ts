@@ -1,3 +1,8 @@
+/**
+ * Fetches OpenAI's model list for the AI settings form.
+ * models.ts calls this when the selected provider is OpenAI. The request goes through the backend proxy.
+ */
+
 import type { ModelInfo } from '../models'
 
 interface OpenAIModel {

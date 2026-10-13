@@ -1,3 +1,8 @@
+/**
+ * Shared fetcher for providers that expose an OpenAI-style /v1/models endpoint.
+ * The smaller adapter files call createOpenAICompatibleFetcher with their proxy URL.
+ */
+
 import type { ModelInfo } from '../models'
 
 interface OpenAICompatibleModel {

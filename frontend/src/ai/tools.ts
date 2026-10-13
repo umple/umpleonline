@@ -1,3 +1,8 @@
+/**
+ * Tools the Umple AI agent can call against the open model.
+ * It can read the buffer, apply a search-and-replace, replace the whole file, or ask the backend to compile.
+ */
+
 import { tool } from 'ai'
 import { z } from 'zod'
 import { useSessionStore } from '@/stores/sessionStore'

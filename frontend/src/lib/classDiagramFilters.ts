@@ -1,3 +1,8 @@
+/**
+ * Reads filter and mixset declarations out of the Umple text for the class-diagram request.
+ * The canvas toolbar edits these, and the diagram request sends them to the backend overlay.
+ */
+
 import type { ApiTab } from '@/api/types'
 
 export const CLASS_FILTER_DEFAULT_QUERY = '*'

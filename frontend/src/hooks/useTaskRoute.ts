@@ -1,3 +1,8 @@
+/**
+ * Loads a teaching task when the URL is /tasks/:name or a response id.
+ * AppShell calls this on every page. A task name creates a response and redirects to it.
+ */
+
 import { useEffect, useRef } from 'react'
 import { useMatch, useNavigate } from 'react-router-dom'
 import { useSessionStore } from '../stores/sessionStore'

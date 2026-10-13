@@ -1,3 +1,8 @@
+/**
+ * Settings saved in the browser.
+ * Theme, dynamic generation, diagram display options, and the AI provider configuration. sessionStore holds the open model instead.
+ */
+
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import {

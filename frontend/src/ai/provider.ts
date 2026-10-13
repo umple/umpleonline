@@ -1,3 +1,8 @@
+/**
+ * Creates the AI SDK model for the provider the user picked.
+ * Every provider is reached through /api/ai so the browser talks to our backend, which forwards to the vendor.
+ */
+
 import type { LanguageModel } from 'ai'
 import type { AiProvider } from '@/stores/preferencesStore'
 
