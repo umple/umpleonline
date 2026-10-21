@@ -2,10 +2,11 @@ import { useEffect, useRef } from "react";
 import { useSessionStore } from "../stores/sessionStore";
 import { useCollabStore } from "../stores/collabStore";
 import { useEphemeralStore } from "../stores/ephemeralStore";
+import { usePreferencesStore } from "../stores/preferencesStore";
 import { isTemporaryModel } from "../lib/modelId";
 import { getViewForLegacyDiagramType } from "../constants/diagram";
 import { getDefaultViewForExampleCategory } from "../constants/examples";
-import { getGenerateTarget } from "../generation/targets";
+import { getGenerateTarget, getGenerateTargetIdForView } from "../generation/targets";
 import { api } from "../api/client";
 
 const initialParams = new URLSearchParams(window.location.search);
@@ -78,7 +79,19 @@ export function useModelFromURL() {
     // ?diagramtype=
     if (initialDiagramType) {
       const mapped = getViewForLegacyDiagramType(initialDiagramType);
-      if (mapped) useSessionStore.getState().setViewMode(mapped);
+      if (mapped) {
+        const targetId = getGenerateTargetIdForView(mapped);
+        useSessionStore.getState().setViewMode(mapped);
+        if (targetId) useSessionStore.getState().setGenerateTargetId(targetId);
+      }
+
+      // Class diagram types carry the Traits option, as in legacy UmpleOnline.
+      if (mapped === "class") {
+        const showTraits = initialDiagramType === "GvClassTrait";
+        if (usePreferencesStore.getState().showTraits !== showTraits) {
+          usePreferencesStore.getState().toggleDisplayPref("showTraits");
+        }
+      }
     }
 
     // ?readOnly
@@ -117,7 +130,11 @@ export function useModelFromURL() {
           const nextView = getDefaultViewForExampleCategory(
             res.defaultCategoryId,
           );
-          if (nextView) setViewMode(nextView);
+          if (nextView) {
+            const targetId = getGenerateTargetIdForView(nextView);
+            setViewMode(nextView);
+            if (targetId) useSessionStore.getState().setGenerateTargetId(targetId);
+          }
         }
       })
       .catch(() => {

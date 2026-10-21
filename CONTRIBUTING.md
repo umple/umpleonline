@@ -103,7 +103,7 @@ umpleonline/
 ├── frontend/           # React/TypeScript frontend (Vite, CodeMirror, ReactFlow)
 ├── backend/            # Go API server (communicates with umplesync.jar + Graphviz)
 ├── code-exec/          # Node.js sandboxed code runner
-├── examples/           # Built-in Umple example files (.ump)
+├── examples/           # Example menu metadata; .ump seed (downloaded via make fetch-examples, gitignored)
 ├── jars/               # umplesync.jar and digest (downloaded via make fetch-jar, gitignored)
 ├── data/               # Runtime data (models, temp files)
 ├── .github/workflows/  # CI/CD pipelines

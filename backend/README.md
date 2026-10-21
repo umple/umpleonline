@@ -64,7 +64,7 @@ plus one `.ump` file per tab.
 - `GET /api/models/{id}` and `POST /api/models/{id}/promote` - model loading
   and temporary-to-durable promotion.
 - `GET /api/examples`, `GET /api/examples/{id}`, and
-  `GET /api/examples/resolve` - bundled example catalog.
+  `GET /api/examples/resolve` - example catalog and source loading.
 - `POST /api/crud/schema` and `POST /api/crud/diagram` - CRUD model helpers.
 - `POST /api/tasks` and related task response routes - task workflows.
 - `/api/ai/*` - provider proxying for browser-origin AI calls.
@@ -102,8 +102,10 @@ This backend keeps the compiler contract but changes the architecture:
   functions embedded in compiler configuration.
 - Compiler process supervision lives in `internal/compiler.Pool`, with restart
   and per-model locking in one place.
-- Examples are served from the checked-in `examples/` snapshot instead of being
-  assembled from legacy page/menu generation at runtime.
+- Example sources are fetched from the Umple library
+  (`EXAMPLE_LIBRARY_URL`) on every request, falling back to the runtime cache
+  (`EXAMPLE_CACHE_PATH`) and then the seeded files (`EXAMPLE_PATH`), instead of
+  being assembled from legacy page/menu generation at runtime.
 - Code execution is delegated to the separate `code-exec` service instead of
   being handled inside the same PHP endpoint family.
 - Status and health are first-class JSON APIs rather than operational details
