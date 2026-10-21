@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/umple/umpleonline/backend/internal/config"
@@ -17,6 +20,12 @@ import (
 )
 
 const exampleManifestFileName = "example_manifest.json"
+
+const maxLibraryExampleBytes = 1 << 20
+
+// Example names may address subdirectories of the Umple library, but nothing
+// outside it. Classic UmpleOnline restricts the argument the same way.
+var libraryExamplePattern = regexp.MustCompile(`^[A-Za-z0-9_.\-/]+$`)
 
 type ExampleEntry struct {
 	ID       string `json:"id"`
@@ -63,6 +72,8 @@ type ExampleResponse struct {
 
 type ExampleHandler struct {
 	examplePath string
+	libraryURL  string
+	client      *http.Client
 	store       *model.Store
 }
 
@@ -77,6 +88,7 @@ type exampleSpec struct {
 	setID      ExampleSetID
 	categoryID ExampleCategoryID
 	sourcePath string
+	library    bool
 }
 
 type exampleManifestFile struct {
@@ -111,7 +123,14 @@ func (e *fetchError) Unwrap() error {
 func NewExampleHandler(cfg *config.Config, store *model.Store) *ExampleHandler {
 	return &ExampleHandler{
 		examplePath: cfg.ExamplePath,
-		store:       store,
+		libraryURL:  cfg.ExampleLibrary,
+		client: &http.Client{
+			Timeout: 5 * time.Second,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+		store: store,
 	}
 }
 
@@ -141,7 +160,12 @@ func (h *ExampleHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 
 	id, ok := manifest.byLegacyExample[legacyExample]
 	if !ok {
-		writeError(w, http.StatusNotFound, "example not found")
+		spec, valid := libraryExampleSpec(legacyExample)
+		if !valid {
+			writeError(w, http.StatusNotFound, "example not found")
+			return
+		}
+		h.respondWithExample(w, spec)
 		return
 	}
 
@@ -272,6 +296,12 @@ func (h *ExampleHandler) buildManifest() (*exampleManifest, error) {
 }
 
 func (h *ExampleHandler) exampleCode(spec exampleSpec) (string, error) {
+	if spec.library && h.libraryURL != "" {
+		if code, err := h.libraryExampleCode(spec.sourcePath); err == nil {
+			return code, nil
+		}
+	}
+
 	data, err := os.ReadFile(filepath.Join(h.examplePath, filepath.FromSlash(spec.sourcePath)))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -280,6 +310,51 @@ func (h *ExampleHandler) exampleCode(spec exampleSpec) (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+func (h *ExampleHandler) libraryExampleCode(sourcePath string) (string, error) {
+	resp, err := h.client.Get(strings.TrimRight(h.libraryURL, "/") + "/" + sourcePath)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("status %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxLibraryExampleBytes+1))
+	if err != nil {
+		return "", err
+	}
+	if len(data) > maxLibraryExampleBytes {
+		return "", fmt.Errorf("example exceeds %d bytes", maxLibraryExampleBytes)
+	}
+	return string(data), nil
+}
+
+// libraryExampleSpec describes an example that the bundled manifest does not
+// list, so that it can be loaded from the Umple library by path.
+func libraryExampleSpec(legacyExample string) (exampleSpec, bool) {
+	if !libraryExamplePattern.MatchString(legacyExample) ||
+		path.Clean(legacyExample) != legacyExample ||
+		path.IsAbs(legacyExample) ||
+		strings.HasPrefix(legacyExample, "..") {
+		return exampleSpec{}, false
+	}
+
+	sourcePath := legacyExample + ".ump"
+	name := path.Base(legacyExample)
+	return exampleSpec{
+		entry: ExampleEntry{
+			ID:       stableExampleID("", sourcePath),
+			Name:     name,
+			Label:    name,
+			Filename: sourcePath,
+		},
+		sourcePath: sourcePath,
+		library:    true,
+	}, true
 }
 
 func stableExampleID(setID ExampleSetID, raw string) string {
