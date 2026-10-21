@@ -72,6 +72,7 @@ type ExampleResponse struct {
 
 type ExampleHandler struct {
 	examplePath string
+	cachePath   string
 	libraryURL  string
 	client      *http.Client
 	store       *model.Store
@@ -88,7 +89,6 @@ type exampleSpec struct {
 	setID      ExampleSetID
 	categoryID ExampleCategoryID
 	sourcePath string
-	library    bool
 }
 
 type exampleManifestFile struct {
@@ -123,6 +123,7 @@ func (e *fetchError) Unwrap() error {
 func NewExampleHandler(cfg *config.Config, store *model.Store) *ExampleHandler {
 	return &ExampleHandler{
 		examplePath: cfg.ExamplePath,
+		cachePath:   cfg.ExampleCachePath,
 		libraryURL:  cfg.ExampleLibrary,
 		client: &http.Client{
 			Timeout: 5 * time.Second,
@@ -295,14 +296,34 @@ func (h *ExampleHandler) buildManifest() (*exampleManifest, error) {
 	return manifest, nil
 }
 
+// exampleCode always tries the Umple library first so that the running site
+// follows upstream, then falls back to the runtime cache and finally to the
+// example files shipped with the backend.
 func (h *ExampleHandler) exampleCode(spec exampleSpec) (string, error) {
-	if spec.library && h.libraryURL != "" {
+	if !safeExamplePath(spec.sourcePath) {
+		return "", &fetchError{status: http.StatusNotFound, err: os.ErrNotExist}
+	}
+
+	if h.libraryURL != "" {
 		if code, err := h.libraryExampleCode(spec.sourcePath); err == nil {
+			h.cacheExample(spec.sourcePath, code)
 			return code, nil
 		}
 	}
 
-	data, err := os.ReadFile(filepath.Join(h.examplePath, filepath.FromSlash(spec.sourcePath)))
+	if code, err := readExampleFile(h.cachePath, spec.sourcePath); err == nil {
+		return code, nil
+	}
+
+	return readExampleFile(h.examplePath, spec.sourcePath)
+}
+
+func readExampleFile(root, sourcePath string) (string, error) {
+	if root == "" {
+		return "", &fetchError{status: http.StatusNotFound, err: os.ErrNotExist}
+	}
+
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(sourcePath)))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", &fetchError{status: http.StatusNotFound, err: err}
@@ -310,6 +331,38 @@ func (h *ExampleHandler) exampleCode(spec exampleSpec) (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+// cacheExample keeps the fetched example for the next time the library cannot
+// be reached. The example already loaded, so write failures are ignored.
+func (h *ExampleHandler) cacheExample(sourcePath, code string) {
+	if h.cachePath == "" {
+		return
+	}
+
+	target := filepath.Join(h.cachePath, filepath.FromSlash(sourcePath))
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return
+	}
+
+	// Replace the cached file atomically so an interrupted write cannot leave a
+	// truncated example behind.
+	temp, err := os.CreateTemp(filepath.Dir(target), ".example-*")
+	if err != nil {
+		return
+	}
+	if _, err := temp.WriteString(code); err != nil {
+		temp.Close()
+		os.Remove(temp.Name())
+		return
+	}
+	if err := temp.Close(); err != nil {
+		os.Remove(temp.Name())
+		return
+	}
+	if err := os.Rename(temp.Name(), target); err != nil {
+		os.Remove(temp.Name())
+	}
 }
 
 func (h *ExampleHandler) libraryExampleCode(sourcePath string) (string, error) {
@@ -336,10 +389,7 @@ func (h *ExampleHandler) libraryExampleCode(sourcePath string) (string, error) {
 // libraryExampleSpec describes an example that the bundled manifest does not
 // list, so that it can be loaded from the Umple library by path.
 func libraryExampleSpec(legacyExample string) (exampleSpec, bool) {
-	if !libraryExamplePattern.MatchString(legacyExample) ||
-		path.Clean(legacyExample) != legacyExample ||
-		path.IsAbs(legacyExample) ||
-		strings.HasPrefix(legacyExample, "..") {
+	if !safeExamplePath(legacyExample) {
 		return exampleSpec{}, false
 	}
 
@@ -353,8 +403,16 @@ func libraryExampleSpec(legacyExample string) (exampleSpec, bool) {
 			Filename: sourcePath,
 		},
 		sourcePath: sourcePath,
-		library:    true,
 	}, true
+}
+
+// safeExamplePath reports whether a name addresses a file inside the Umple
+// library, so that it can neither leave the library nor leave the cache.
+func safeExamplePath(name string) bool {
+	return libraryExamplePattern.MatchString(name) &&
+		path.Clean(name) == name &&
+		!path.IsAbs(name) &&
+		!strings.HasPrefix(name, "..")
 }
 
 func stableExampleID(setID ExampleSetID, raw string) string {

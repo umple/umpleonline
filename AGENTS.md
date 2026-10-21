@@ -46,6 +46,7 @@ If you add new Go dependencies: run `docker compose exec backend go mod tidy`.
 - Changed `Dockerfile.dev` or `docker-compose.yml` → `docker compose up -d --build`
 - Changed `package.json` (new frontend deps) → `bun install`
 - First time setup → `make fetch-jar && make install && make dev`
+- Working offline → `make fetch-examples` first, so examples are available without the network
 
 ## Key Commands
 
@@ -62,6 +63,7 @@ If you add new Go dependencies: run `docker compose exec backend go mod tidy`.
 | `make tidy` | Run `go mod tidy` for backend |
 | `make clean` | Stop services + remove temp model data |
 | `make fetch-jar` | Download the latest UmpleOnline-hosted umplesync.jar |
+| `make fetch-examples` | Download the Umple example library into `examples/` as an offline seed |
 | `make check` | Run the local equivalent of the CI validation suite |
 
 ## Playwright

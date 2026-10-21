@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { mkdir, mkdtemp, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 
@@ -149,7 +149,6 @@ async function fetchLegacySnapshot(legacyRepo: string, legacyRef: string): Promi
         "--no-cone",
         "umpleonline/umple.php",
         "umpleonline/generatedExtraExample1OptionsAD.html",
-        "umpleonline/umplibrary",
       ],
     );
 
@@ -235,21 +234,6 @@ function manifestText(manifest: ExampleManifest): string {
   return `${JSON.stringify(manifest, null, 2)}\n`;
 }
 
-function referencedExamplePaths(manifest: ExampleManifest): string[] {
-  const seen = new Set<string>();
-  const ordered: string[] = [];
-
-  for (const exampleSet of manifest.sets) {
-    for (const example of exampleSet.examples) {
-      if (seen.has(example.filename)) continue;
-      seen.add(example.filename);
-      ordered.push(example.filename);
-    }
-  }
-
-  return ordered;
-}
-
 async function maybeWriteFile(target: string, content: Uint8Array | string): Promise<boolean> {
   const nextBytes =
     typeof content === "string" ? Buffer.from(content) : Buffer.from(content);
@@ -268,62 +252,6 @@ async function maybeWriteFile(target: string, content: Uint8Array | string): Pro
   return true;
 }
 
-async function syncReferencedExamples(legacyRoot: string, manifest: ExampleManifest) {
-  const legacyExamplesRoot = join(legacyRoot, "umpleonline", "umplibrary");
-  const nextReferenced = new Set(referencedExamplePaths(manifest));
-  const updated: string[] = [];
-  const removed: string[] = [];
-
-  let previousManifest: ExampleManifest | null = null;
-  try {
-    previousManifest = JSON.parse(
-      await readFile(join(LOCAL_EXAMPLES_ROOT, "example_manifest.json"), "utf8"),
-    ) as ExampleManifest;
-  } catch {
-    previousManifest = null;
-  }
-
-  for (const relativePath of nextReferenced) {
-    const source = join(legacyExamplesRoot, relativePath);
-    const target = join(LOCAL_EXAMPLES_ROOT, relativePath);
-    const sourceBytes = await readFile(source);
-    if (await maybeWriteFile(target, sourceBytes)) {
-      updated.push(relativePath);
-    }
-  }
-
-  const previousReferenced = previousManifest
-    ? referencedExamplePaths(previousManifest)
-    : [];
-
-  for (const relativePath of previousReferenced) {
-    if (nextReferenced.has(relativePath)) continue;
-
-    const target = join(LOCAL_EXAMPLES_ROOT, relativePath);
-    try {
-      await unlink(target);
-      removed.push(relativePath);
-      await pruneEmptyParents(dirname(target), LOCAL_EXAMPLES_ROOT);
-    } catch {
-      // Ignore files that are already absent.
-    }
-  }
-
-  return { updated, removed };
-}
-
-async function pruneEmptyParents(currentDir: string, stopDir: string) {
-  let dir = currentDir;
-  while (dir.startsWith(stopDir) && dir !== stopDir) {
-    const entries = await readdir(dir);
-    if (entries.length > 0) {
-      return;
-    }
-    await rm(dir, { recursive: true, force: true });
-    dir = dirname(dir);
-  }
-}
-
 async function main() {
   const { legacyRepo, legacyRef } = parseArgs(Bun.argv.slice(2));
   const legacyRoot = await fetchLegacySnapshot(legacyRepo, legacyRef);
@@ -331,29 +259,11 @@ async function main() {
   try {
     const manifest = await buildManifest(legacyRoot);
     const manifestPath = join(LOCAL_EXAMPLES_ROOT, "example_manifest.json");
-    const manifestChanged = await maybeWriteFile(manifestPath, manifestText(manifest));
-    const { updated, removed } = await syncReferencedExamples(legacyRoot, manifest);
 
-    if (manifestChanged) {
+    if (await maybeWriteFile(manifestPath, manifestText(manifest))) {
       console.log(`Updated ${relative(REPO_ROOT, manifestPath)}`);
     } else {
       console.log(`Manifest already up to date: ${relative(REPO_ROOT, manifestPath)}`);
-    }
-
-    if (updated.length > 0) {
-      console.log("Updated bundled example files:");
-      for (const path of updated) {
-        console.log(`  - examples/${path}`);
-      }
-    } else {
-      console.log("No referenced bundled example file updates were needed.");
-    }
-
-    if (removed.length > 0) {
-      console.log("Removed obsolete bundled example files:");
-      for (const path of removed) {
-        console.log(`  - examples/${path}`);
-      }
     }
   } finally {
     await rm(legacyRoot, { recursive: true, force: true });

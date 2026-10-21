@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -207,9 +208,10 @@ func TestLoadManifestReflectsUpdatedManifestFile(t *testing.T) {
 	}
 }
 
-func TestBundledManifestReferencesExistingExamples(t *testing.T) {
-	root := bundledExamplesRoot()
-	raw, err := os.ReadFile(filepath.Join(root, exampleManifestFileName))
+// Example sources come from the Umple library rather than this repository, so
+// the manifest is checked for shape and for paths the handler will accept.
+func TestBundledManifestUsesSafeExamplePaths(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(bundledExamplesRoot(), exampleManifestFileName))
 	if err != nil {
 		t.Fatalf("read bundled manifest: %v", err)
 	}
@@ -221,11 +223,19 @@ func TestBundledManifestReferencesExistingExamples(t *testing.T) {
 
 	count := 0
 	for _, set := range manifest.Sets {
+		if set.ID == "" || set.Label == "" || set.CategoryID == "" {
+			t.Fatalf("manifest set %q is missing its menu metadata", set.ID)
+		}
+
 		for _, example := range set.Examples {
 			count++
-			target := filepath.Join(root, filepath.FromSlash(example.Filename))
-			if _, err := os.Stat(target); err != nil {
-				t.Fatalf("bundled example %q missing at %s: %v", example.Filename, target, err)
+			// The same example may appear in more than one set, so source paths
+			// are deliberately not required to be unique.
+			if !strings.HasSuffix(example.Filename, ".ump") {
+				t.Fatalf("manifest example %q is not a .ump source", example.Filename)
+			}
+			if !safeExamplePath(example.Filename) {
+				t.Fatalf("manifest example %q is not a safe library path", example.Filename)
 			}
 		}
 	}
@@ -311,26 +321,178 @@ func TestResolveLibraryExampleFromUpstream(t *testing.T) {
 	}
 }
 
-func TestResolveManifestExampleSkipsLibrary(t *testing.T) {
+func TestResolveManifestExamplePrefersLibrary(t *testing.T) {
+	requested := make([]string, 0, 1)
+	server := newTestLibraryServer(t, &requested, map[string]string{
+		"/2DShapes.ump": "class Upstream {}",
+	})
+	handler := newTestLibraryExampleHandler(t, server.URL)
+
+	resp := resolveExampleResponse(t, handler, "2DShapes")
+	if resp.Code != "class Upstream {}" {
+		t.Fatalf("expected the library copy to be served, got %q", resp.Code)
+	}
+	if resp.Label != "2DShapes *" || resp.Name != "2DShapes" {
+		t.Fatalf("unexpected manifest metadata: name = %q, label = %q", resp.Name, resp.Label)
+	}
+	if resp.SetID != ExampleSet1 || resp.DefaultCategoryID != ExampleCategoryClass {
+		t.Fatalf("expected manifest set and category, got %q and %q", resp.SetID, resp.DefaultCategoryID)
+	}
+	if resp.ID == "" {
+		t.Fatal("expected the manifest example id to be preserved")
+	}
+	if len(requested) != 1 {
+		t.Fatalf("expected one library request for a manifest example, got %v", requested)
+	}
+	if code := readCachedExample(t, handler, "2DShapes.ump"); code != "class Upstream {}" {
+		t.Fatalf("expected the fetched example to be cached, got %q", code)
+	}
+	assertCacheEntries(t, handler, "2DShapes.ump")
+}
+
+func TestResolveManifestExampleUsesCacheWhenLibraryUnreachable(t *testing.T) {
+	requested := make([]string, 0, 2)
+	server := newTestLibraryServer(t, &requested, map[string]string{
+		"/2DShapes.ump": "class Upstream {}",
+	})
+	handler := newTestLibraryExampleHandler(t, server.URL)
+
+	if resp := resolveExampleResponse(t, handler, "2DShapes"); resp.Code != "class Upstream {}" {
+		t.Fatalf("expected the library copy to be served, got %q", resp.Code)
+	}
+
+	server.Close()
+
+	resp := resolveExampleResponse(t, handler, "2DShapes")
+	if resp.Code != "class Upstream {}" {
+		t.Fatalf("expected the cached copy to be served, got %q", resp.Code)
+	}
+	if resp.Label != "2DShapes *" {
+		t.Fatalf("unexpected manifest label: %q", resp.Label)
+	}
+}
+
+func TestResolveLibraryExampleReplacesStaleCache(t *testing.T) {
+	requested := make([]string, 0, 2)
+	files := map[string]string{"/manualexamples/Garage.ump": "class Garage {}"}
+	server := newTestLibraryServer(t, &requested, files)
+	handler := newTestLibraryExampleHandler(t, server.URL)
+
+	if resp := resolveExampleResponse(t, handler, "manualexamples/Garage"); resp.Code != "class Garage {}" {
+		t.Fatalf("unexpected first response: %q", resp.Code)
+	}
+
+	files["/manualexamples/Garage.ump"] = "class GarageDoor {}"
+
+	if resp := resolveExampleResponse(t, handler, "manualexamples/Garage"); resp.Code != "class GarageDoor {}" {
+		t.Fatalf("expected the updated library copy, got %q", resp.Code)
+	}
+	if code := readCachedExample(t, handler, "manualexamples/Garage.ump"); code != "class GarageDoor {}" {
+		t.Fatalf("expected the cache to be refreshed, got %q", code)
+	}
+
+	server.Close()
+
+	if resp := resolveExampleResponse(t, handler, "manualexamples/Garage"); resp.Code != "class GarageDoor {}" {
+		t.Fatalf("expected the refreshed cache to be served, got %q", resp.Code)
+	}
+}
+
+func TestResolveManifestExampleUsesCacheWithoutLibraryURL(t *testing.T) {
+	handler := newTestLibraryExampleHandler(t, "")
+	if err := os.MkdirAll(handler.cachePath, 0o755); err != nil {
+		t.Fatalf("create cache dir: %v", err)
+	}
+	writeTextFixture(t, filepath.Join(handler.cachePath, "BankingSystemA.ump"), "class Cached {}")
+
+	resp := resolveExampleResponse(t, handler, "BankingSystemA")
+	if resp.Code != "class Cached {}" {
+		t.Fatalf("expected the cached copy to be served, got %q", resp.Code)
+	}
+	if resp.SetID != ExampleSet1 {
+		t.Fatalf("expected the manifest set to be preserved, got %q", resp.SetID)
+	}
+}
+
+func TestResolveManifestExampleFallsBackToSeededFile(t *testing.T) {
+	requested := make([]string, 0, 1)
+	server := newTestLibraryServer(t, &requested, map[string]string{})
+	server.Close()
+
+	handler := newTestLibraryExampleHandler(t, server.URL)
+
+	resp := resolveExampleResponse(t, handler, "BankingSystemA")
+	if resp.Code != "class Account {}" {
+		t.Fatalf("expected the seeded example to be served, got %q", resp.Code)
+	}
+	if resp.SetID != ExampleSet1 {
+		t.Fatalf("expected the manifest set to be preserved, got %q", resp.SetID)
+	}
+	if _, err := os.Stat(handler.cachePath); !os.IsNotExist(err) {
+		t.Fatalf("expected no cache directory after a failed fetch, got %v", err)
+	}
+}
+
+func TestResolveManifestExampleMissingEverywhere(t *testing.T) {
 	requested := make([]string, 0, 1)
 	server := newTestLibraryServer(t, &requested, map[string]string{})
 	handler := newTestLibraryExampleHandler(t, server.URL)
 
-	res := resolveTestExample(t, handler, "2DShapes")
-	if res.Code != http.StatusOK {
-		t.Fatalf("resolve bundled example status = %d, body = %s", res.Code, res.Body.String())
+	if err := os.Remove(filepath.Join(handler.examplePath, "BankingSystemA.ump")); err != nil {
+		t.Fatalf("remove seeded example: %v", err)
 	}
 
-	var resp ExampleResponse
-	if err := json.Unmarshal(res.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode resolve response: %v", err)
+	res := resolveTestExample(t, handler, "BankingSystemA")
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("resolve unavailable example status = %d, body = %s", res.Code, res.Body.String())
 	}
-	if resp.Label != "2DShapes *" {
-		t.Fatalf("unexpected bundled example label: %q", resp.Label)
+}
+
+func TestResolveLibraryExampleSurvivesCacheWriteFailure(t *testing.T) {
+	requested := make([]string, 0, 1)
+	server := newTestLibraryServer(t, &requested, map[string]string{
+		"/manualexamples/Garage.ump": "class Garage {}",
+	})
+	handler := newTestLibraryExampleHandler(t, server.URL)
+
+	// A regular file where the cache directory belongs makes every cache write fail.
+	writeTextFixture(t, handler.cachePath, "not a directory")
+
+	if resp := resolveExampleResponse(t, handler, "manualexamples/Garage"); resp.Code != "class Garage {}" {
+		t.Fatalf("expected the library copy to be served, got %q", resp.Code)
+	}
+}
+
+func TestResolveUnsafeManifestExampleWritesNoCacheFile(t *testing.T) {
+	requested := make([]string, 0, 1)
+	server := newTestLibraryServer(t, &requested, map[string]string{})
+	handler := newTestLibraryExampleHandler(t, server.URL)
+
+	root := t.TempDir()
+	writeJSONFixture(t, filepath.Join(root, exampleManifestFileName), exampleManifestFile{
+		Sets: []exampleManifestSet{{
+			ID:         ExampleSet1,
+			Label:      "Class Diagrams",
+			CategoryID: ExampleCategoryClass,
+			Examples:   []exampleManifestEntry{{Filename: "../escaped.ump", Label: "Escaped"}},
+		}},
+	})
+	handler.examplePath = root
+
+	// A readable file at the escaped location must not be served either.
+	writeTextFixture(t, filepath.Join(filepath.Dir(root), "escaped.ump"), "class Escaped {}")
+
+	res := resolveTestExample(t, handler, "../escaped")
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("resolve unsafe manifest path status = %d, body = %s", res.Code, res.Body.String())
+	}
+	if strings.Contains(res.Body.String(), "Escaped") {
+		t.Fatalf("expected no file outside the example root to be read, got %s", res.Body.String())
 	}
 	if len(requested) != 0 {
-		t.Fatalf("expected no library requests for a bundled example, got %v", requested)
+		t.Fatalf("expected no library request for an unsafe manifest path, got %v", requested)
 	}
+	assertCacheEntries(t, handler)
 }
 
 func TestResolveLibraryExampleMissingUpstream(t *testing.T) {
@@ -386,6 +548,7 @@ func TestResolveLibraryExampleRejectsOversizedResponse(t *testing.T) {
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("resolve oversized example status = %d, body = %s", res.Code, res.Body.String())
 	}
+	assertCacheEntries(t, handler)
 }
 
 func TestResolveLibraryExampleDoesNotFollowRedirects(t *testing.T) {
@@ -530,8 +693,9 @@ func newTestLibraryExampleHandler(t *testing.T, libraryURL string) *ExampleHandl
 	}
 
 	cfg := &config.Config{
-		ExamplePath:    newTestExampleRoot(t),
-		ExampleLibrary: libraryURL,
+		ExamplePath:      newTestExampleRoot(t),
+		ExampleLibrary:   libraryURL,
+		ExampleCachePath: filepath.Join(t.TempDir(), "cache"),
 	}
 	return NewExampleHandler(cfg, store)
 }
@@ -559,6 +723,57 @@ func resolveTestExample(t *testing.T, handler *ExampleHandler, example string) *
 	res := httptest.NewRecorder()
 	handler.Resolve(res, req)
 	return res
+}
+
+func resolveExampleResponse(t *testing.T, handler *ExampleHandler, example string) ExampleResponse {
+	t.Helper()
+
+	res := resolveTestExample(t, handler, example)
+	if res.Code != http.StatusOK {
+		t.Fatalf("resolve %q status = %d, body = %s", example, res.Code, res.Body.String())
+	}
+
+	var resp ExampleResponse
+	if err := json.Unmarshal(res.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode resolve response: %v", err)
+	}
+	return resp
+}
+
+// assertCacheEntries checks the cache holds exactly the expected examples, so
+// that a rejected download leaves neither a truncated file nor a temporary one.
+func assertCacheEntries(t *testing.T, handler *ExampleHandler, want ...string) {
+	t.Helper()
+
+	found := make([]string, 0, len(want))
+	err := filepath.WalkDir(handler.cachePath, func(current string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		relative, err := filepath.Rel(handler.cachePath, current)
+		if err != nil {
+			return err
+		}
+		found = append(found, filepath.ToSlash(relative))
+		return nil
+	})
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("walk cache: %v", err)
+	}
+
+	if strings.Join(found, ",") != strings.Join(want, ",") {
+		t.Fatalf("cache contains %v, want %v", found, want)
+	}
+}
+
+func readCachedExample(t *testing.T, handler *ExampleHandler, sourcePath string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(filepath.Join(handler.cachePath, filepath.FromSlash(sourcePath)))
+	if err != nil {
+		t.Fatalf("read cached example: %v", err)
+	}
+	return string(data)
 }
 
 func writeJSONFixture(t *testing.T, target string, value any) {
