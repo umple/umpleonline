@@ -23,7 +23,7 @@ function getLastRequest(requests: GenerationRequest[]) {
 
 function addPreferencesInitScript(
   page: Page,
-  { dynamicGeneration = true }: { dynamicGeneration?: boolean } = {},
+  { dynamicGeneration = true, showTraits = false }: { dynamicGeneration?: boolean; showTraits?: boolean } = {},
 ) {
   return page.addInitScript((prefs) => {
     localStorage.setItem(
@@ -32,11 +32,12 @@ function addPreferencesInitScript(
         state: {
           hasSeenWelcome: true,
           dynamicGeneration: prefs.dynamicGeneration,
+          showTraits: prefs.showTraits,
         },
         version: 4,
       }),
     )
-  }, { dynamicGeneration })
+  }, { dynamicGeneration, showTraits })
 }
 
 async function setEditorCode(page: Page, code: string) {
@@ -199,6 +200,21 @@ async function installDiagramRoutes(page: Page, requests: GenerationRequest[]) {
   })
 }
 
+async function installStateExampleRoute(page: Page) {
+  await page.route('**/api/examples/resolve*', async (route) => {
+    await route.fulfill({
+      json: {
+        id: 'ex-playwright-state',
+        name: 'MicrowaveOven2',
+        label: 'Microwave Oven *',
+        code: 'class Invoice { number; }',
+        setId: 'example-set-3',
+        defaultCategoryId: 'state',
+      },
+    })
+  })
+}
+
 test.describe('Generation UI', () => {
   test('uses class diagram generation as the default output target', async ({ page }) => {
     const requests: GenerationRequest[] = []
@@ -219,6 +235,121 @@ test.describe('Generation UI', () => {
     await expect
       .poll(() => getLastRequest(requests)?.language ?? null)
       .toBe(null)
+  })
+
+  test('keeps the diagramtype URL option as the output target after compiling', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+
+    await page.goto('/?diagramtype=GvState')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await setEditorCode(page, 'class Invoice { number; }')
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvStateDiagram')
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText(
+      'State Diagram (GraphViz SVG)',
+    )
+  })
+
+  test('enables traits for the GvClassTrait diagramtype URL option', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+
+    await page.goto('/?diagramtype=GvClassTrait')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await setEditorCode(page, 'class Invoice { number; }')
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvClassTraitDiagram')
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText(
+      'GraphViz Class Diagram',
+    )
+  })
+
+  test('keeps traits enabled when GvClassTrait is requested again', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page, { showTraits: true })
+    await installGenerationRoutes(page, requests)
+
+    await page.goto('/?diagramtype=GvClassTrait')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await setEditorCode(page, 'class Invoice { number; }')
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvClassTraitDiagram')
+  })
+
+  test('generates an ordinary class diagram for GvClass when traits were enabled', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page, { showTraits: true })
+    await installGenerationRoutes(page, requests)
+
+    await page.goto('/?diagramtype=GvClass')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await setEditorCode(page, 'class Invoice { number; }')
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvClassDiagram')
+  })
+
+  test('keeps the traits preference when no diagramtype is requested', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page, { showTraits: true })
+    await installGenerationRoutes(page, requests)
+
+    await page.goto('/')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await setEditorCode(page, 'class Invoice { number; }')
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvClassTraitDiagram')
+  })
+
+  test('keeps an example category default as the output target after compiling', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+    await installStateExampleRoute(page)
+
+    await page.goto('/?example=MicrowaveOven2')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvStateDiagram')
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText(
+      'State Diagram (GraphViz SVG)',
+    )
+  })
+
+  test('lets diagramtype override the example category default', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+    await installStateExampleRoute(page)
+
+    await page.goto('/?example=MicrowaveOven2&diagramtype=GvClass')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvClassDiagram')
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText(
+      'GraphViz Class Diagram',
+    )
   })
 
   test('keeps all generated code visible by default and offers per-file tabs', async ({ page }) => {
