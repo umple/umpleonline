@@ -9,6 +9,7 @@
     "pm2": "^5.4.3"
   },
   "scripts": {
+    "test": "node --test status.test.js",
     "start": "pm2 start app.js --no-daemon"
   },
   "author": "",

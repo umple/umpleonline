@@ -18,6 +18,9 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({
       status: 'ok',
+      nodeVersion: process.version,
+      hostname: process.env.HOSTNAME,
+      sessionDefinition: 'A room lifetime; users are connected clients; peak collaborators is per room',
       port: PORT,
       pid: process.pid,
       uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),

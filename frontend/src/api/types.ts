@@ -286,7 +286,18 @@ export interface PromoteResponse {
   newId: string;
 }
 
+export interface StatusSummary {
+  status: string;
+  compiler: { version?: string; commandsSinceStart?: number; commandsHistorical?: number };
+  visits?: number;
+  sessions?: number;
+  branch?: string;
+  commit?: string;
+  updatedAt?: string;
+}
+
 export interface StatusResponse {
+  summary?: StatusSummary;
   status: "ok" | "degraded" | string;
   generatedAt: string;
   uptimeSeconds: number;

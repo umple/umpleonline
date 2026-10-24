@@ -136,6 +136,8 @@ const server = http.createServer((req, res) => {
       status: "ok",
       port: LSP_PORT,
       pid: process.pid,
+      nodeVersion: process.version,
+      hostname: process.env.HOSTNAME,
       uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
       command: LSP_COMMAND,
       baseDir: UMP_BASE_DIR,

@@ -21,6 +21,10 @@ const (
 // the response, parsing the ERROR!!...!!ERROR framing protocol used by
 // umplesync.jar server mode.
 func sendCommand(conn net.Conn, command string) (*CompileResult, error) {
+	return sendCommandWithTimeout(conn, command, readTimeout)
+}
+
+func sendCommandWithTimeout(conn net.Conn, command string, timeout time.Duration) (*CompileResult, error) {
 	// Send command
 	_, err := conn.Write([]byte(command))
 	if err != nil {
@@ -33,12 +37,15 @@ func sendCommand(conn net.Conn, command string) (*CompileResult, error) {
 	hasMoreError := false
 
 	for {
-		conn.SetReadDeadline(time.Now().Add(readTimeout))
+		conn.SetReadDeadline(time.Now().Add(timeout))
 		buf := make([]byte, readBufSize)
 		n, err := conn.Read(buf)
 
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				if command == "-log" {
+					return nil, fmt.Errorf("compiler log response timed out: %w", err)
+				}
 				// Timeout means no more data — normal termination
 				break
 			}
