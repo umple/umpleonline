@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useEphemeralStore } from "../../stores/ephemeralStore";
 import { useSessionStore } from "../../stores/sessionStore";
 import { usePreferencesStore } from "../../stores/preferencesStore";
-import { useRegenerate, useExecute } from "../../hooks/useExecute";
+import { useRegenerate } from "../../hooks/useExecute";
 import { useSelectGenerateTarget } from "../../hooks/useGenerate";
 import { useExamples } from "../../hooks/useExamples";
 import type { ExampleSetId } from "../../api/types";
@@ -23,7 +23,6 @@ import {
   GitFork,
   Hammer,
   Loader2,
-  Play,
   Plus,
   Search,
   Shield,
@@ -81,7 +80,6 @@ const toolbarAcknowledgements = [
 
 export function AppToolbar() {
   const { regenerate, regenerating } = useRegenerate();
-  const { execute } = useExecute();
   const openCommandPalette = useEphemeralStore((s) => s.openCommandPalette);
   const generatingOutput = useEphemeralStore((s) => s.generatingOutput);
   const generatingCode = useEphemeralStore((s) => s.generatingCode);
@@ -104,7 +102,6 @@ export function AppToolbar() {
     loading: loadingExamples,
   } = useExamples();
   const selectedGenerateTarget = getGenerateTarget(generateTargetId);
-  const canExecuteGenerateTarget = Boolean(selectedGenerateTarget?.executable);
   const regeneratingOutput = regenerating || generatingOutput;
   const currentSource = getCompileSourceSnapshot();
   const generationSuspendedForCurrentInput =
@@ -556,35 +553,6 @@ export function AppToolbar() {
               ariaLabel="Generate"
             />
           </span>
-
-          <Tip
-            content={
-              canExecuteGenerateTarget
-                ? `Execute ${selectedGenerateTarget?.label ?? generateTargetId}`
-                : "Execution is only supported for Java and Python"
-            }
-            side="bottom"
-          >
-            <button
-              onClick={() => void execute(generateTargetId)}
-              disabled={executing || !canExecuteGenerateTarget}
-              aria-label={
-                executing
-                  ? "Executing"
-                  : `Execute ${selectedGenerateTarget?.label ?? generateTargetId}`
-              }
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border/70 bg-surface-0 px-2.5 text-xs font-medium text-ink-muted shadow-sm transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {executing ? (
-                <Loader2 className="size-3.5 shrink-0 animate-spin" />
-              ) : (
-                <Play className="size-3.5 shrink-0" />
-              )}
-              <span className="truncate">
-                {executing ? "Executing..." : "Execute"}
-              </span>
-            </button>
-          </Tip>
 
           <Popover>
             <Tip content="Umple AI" side="bottom">

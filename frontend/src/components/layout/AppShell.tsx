@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { AppToolbar } from './AppToolbar'
+import { OutputActions } from './OutputActions'
 import { AppSidebar } from './Sidebar'
 import { EditorPanel } from '../editor/EditorPanel'
 import { OutputPanel, CompileStatusStrip } from '../editor/ExecutionPanel'
@@ -75,6 +76,7 @@ export function AppShell() {
 
       <main id="main-content" className="flex-1 min-w-0 flex flex-col" data-testid="app-shell">
         <AppToolbar />
+        <OutputActions />
         <div className="relative flex-1 min-h-0 px-2.5 pb-2.5">
           <ErrorBoundary>
           <PanelGroup direction="horizontal" className="h-full" id="main-horizontal">
