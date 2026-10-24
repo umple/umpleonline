@@ -1,4 +1,4 @@
-import { Code, LayoutGrid, Workflow, Play, Loader2, ChevronDown } from 'lucide-react'
+import { Code, Play, Loader2, ChevronDown } from 'lucide-react'
 import { useGenerate } from '@/hooks/useGenerate'
 import { useExecute } from '@/hooks/useExecute'
 import { useSessionStore } from '@/stores/sessionStore'
@@ -9,6 +9,30 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { cn } from '@/lib/utils'
 
 const actionButton = 'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border/70 bg-surface-0 px-2.5 text-xs font-medium text-ink-muted shadow-sm transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-70'
+
+// Match the G and S mode icons in classic UmpleOnline's umple.php.
+function ClassDiagramIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="6" height="5" />
+      <rect x="15" y="3" width="6" height="5" />
+      <rect x="9" y="16" width="6" height="5" />
+      <path d="M6 8l5 8" />
+      <path d="M18 8l-5 8" />
+    </svg>
+  )
+}
+
+function StateDiagramIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="12" r="3" />
+      <path d="M9 12h6" />
+      <path d="M13 9l3 3-3 3" />
+    </svg>
+  )
+}
 
 /** Common actions stay visible independently of the searchable output picker. */
 export function OutputActions() {
@@ -25,8 +49,8 @@ export function OutputActions() {
       <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Common outputs">
         {[
           { id: 'Java', label: 'Generate Java', Icon: Code },
-          { id: 'classDiagram', label: 'Show class diagram', Icon: LayoutGrid },
-          { id: 'stateDiagram', label: 'Show state diagram', Icon: Workflow },
+          { id: 'classDiagram', label: 'Show class diagram', Icon: ClassDiagramIcon },
+          { id: 'stateDiagram', label: 'Show state diagram', Icon: StateDiagramIcon },
         ].map(({ id, label, Icon }) => (
           <button
             key={id}
