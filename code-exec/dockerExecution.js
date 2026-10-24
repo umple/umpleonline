@@ -65,6 +65,13 @@ async function ensureRunnerImage(imageName, autoBuild) {
 }
 
 class DockerExecution {
+    static runnerAutoBuildEnabled() {
+        return readBooleanEnv(
+            'EXECUTION_RUNNER_AUTO_BUILD',
+            !Object.prototype.hasOwnProperty.call(process.env, 'EXECUTION_RUNNER_IMAGE'),
+        );
+    }
+
     constructor(pathToMainClass, mainFile, modelPath, language="Java") {
         this.path = pathToMainClass;
         this.mainFile = mainFile;
@@ -75,10 +82,7 @@ class DockerExecution {
         const config = this.readConfig();
         this.baseOutputPath = config['tempPath'] || os.tmpdir();
         this.runnerImage = process.env.EXECUTION_RUNNER_IMAGE || config['tempContainerName'];
-        this.autoBuildRunner = readBooleanEnv(
-            'EXECUTION_RUNNER_AUTO_BUILD',
-            !Object.prototype.hasOwnProperty.call(process.env, 'EXECUTION_RUNNER_IMAGE'),
-        );
+        this.autoBuildRunner = DockerExecution.runnerAutoBuildEnabled();
         this.timeoutValue = +config['timeoutValue'];
     }
 

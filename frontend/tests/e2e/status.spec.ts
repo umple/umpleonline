@@ -154,3 +154,30 @@ test('editor keeps working when statistics are unavailable', async ({ page }) =>
   await expect(page.getByTestId('status-footer')).toContainText('Server statistics unavailable')
   await expect(page.getByTestId('app-shell')).toBeVisible()
 })
+
+test('a runner awaiting its first build is distinct from an execution failure', async ({ page }) => {
+  let failed = false
+  await page.route('**/api/status', route => route.fulfill({ json: {
+    status: failed ? 'degraded' : 'ok',
+    generatedAt: '2026-10-04T12:00:00Z',
+    uptimeSeconds: 10,
+    services: { codeExecution: {
+      status: failed ? 'degraded' : 'ok',
+      runner: failed
+        ? { status: 'unavailable', image: 'umple-code-runner:dev', detail: 'Cannot connect to the Docker daemon' }
+        : { status: 'not_built', image: 'umple-code-runner:dev', autoBuild: true,
+            detail: 'Runner image is not built yet; it will be built automatically on the first execution request.' },
+    } },
+  } }))
+  await page.goto('/status')
+  const execution = page.getByTestId('status-execution')
+  await expect(execution.getByText('Not built yet', { exact: true })).toBeVisible()
+  await expect(execution).toContainText('built automatically on the first execution request')
+  await expect(execution.getByText('unavailable', { exact: true })).toHaveCount(0)
+  await expect(execution.getByText('degraded', { exact: true })).toHaveCount(0)
+  failed = true
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await expect(execution.getByText('unavailable', { exact: true })).toBeVisible()
+  await expect(execution).toContainText('Cannot connect to the Docker daemon')
+  await expect(execution.getByText('Not built yet', { exact: true })).toHaveCount(0)
+})

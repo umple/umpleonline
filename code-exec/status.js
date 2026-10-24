@@ -1,5 +1,6 @@
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
+const DockerExecution = require('./dockerExecution');
 const execFileAsync = promisify(execFile);
 let pending;
 let cached;
@@ -12,17 +13,25 @@ async function command(args) {
 
 async function collectDiagnostics() {
     const runnerImage = process.env.EXECUTION_RUNNER_IMAGE || 'umple-code-runner:dev';
+    const autoBuild = DockerExecution.runnerAutoBuildEnabled();
     const project = process.env.STATUS_COMPOSE_PROJECT;
     const result = {
         docker: { status: 'unavailable', stats: [], project: project || '' },
-        runner: { status: 'unavailable', image: runnerImage },
+        runner: { status: 'unavailable', image: runnerImage, autoBuild },
     };
     const runnerProbe = (async () => {
         try {
             const image = JSON.parse(await command(['image', 'inspect', runnerImage]));
-            result.runner = { status: 'ok', image: runnerImage, id: image[0].Id, createdAt: image[0].Created };
+            result.runner = { ...result.runner, status: 'ok', id: image[0].Id, createdAt: image[0].Created };
         } catch (err) {
-            result.runner.detail = err.stderr?.trim() || err.message;
+            if (err.code === 1 && /No such image:/i.test(err.stderr || '')) {
+                result.runner.status = 'not_built';
+                result.runner.detail = autoBuild
+                    ? 'Runner image is not built yet; it will be built automatically on the first execution request.'
+                    : 'Runner image is missing and automatic builds are disabled. Pull or build the configured image before running code.';
+            } else {
+                result.runner.detail = err.stderr?.trim() || err.message;
+            }
         }
     })();
     try {
@@ -55,6 +64,8 @@ async function collectDiagnostics() {
         result.docker.detail = err.stderr?.trim() || err.message;
     }
     await runnerProbe;
+    const runnerHealthy = result.runner.status === 'ok' || (result.runner.status === 'not_built' && autoBuild);
+    result.status = result.docker.status === 'ok' && runnerHealthy ? 'ok' : 'degraded';
     return result;
 }
 

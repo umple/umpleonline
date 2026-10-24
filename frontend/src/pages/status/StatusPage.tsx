@@ -211,7 +211,11 @@ function StatusContent({ status }: { status: StatusResponse }) {
           description="Code execution requests, concurrency limits, runner image, timeout and Docker availability"
           action={<StatusBadge value={formatValue(status.services?.codeExecution?.status)} />}
           testId="status-execution">
-          <KeyValueTable data={withoutKeys(status.services?.codeExecution, ["docker"])} />
+          <KeyValueTable data={withoutKeys(status.services?.codeExecution, ["docker", "runner"])} />
+          <Separator className="my-4" />
+          <SectionBlock title="Runner image">
+            <KeyValueTable data={asRecord(status.services?.codeExecution?.runner)} compact />
+          </SectionBlock>
         </StatusSection>
       </div>
 
@@ -513,7 +517,7 @@ function StatusBadge({ value }: { value: string }) {
 
   return (
     <Badge variant="outline" className={className}>
-      {value || "unknown"}
+      {normalized === "not_built" ? "Not built yet" : value || "unknown"}
     </Badge>
   );
 }
@@ -538,7 +542,7 @@ function StatusSkeleton() {
 
 function isStatusValue(value: unknown): value is string {
   if (typeof value !== "string") return false;
-  return ["ok", "degraded", "unreachable", "unavailable", "not_tracked", "running", "unparsed"].includes(value.toLowerCase());
+  return ["ok", "degraded", "unreachable", "unavailable", "not_tracked", "not_built", "running", "unparsed"].includes(value.toLowerCase());
 }
 
 function formatValue(value: unknown): string {

@@ -77,7 +77,6 @@ app.get('/status', async (req, res) => {
     const runtime = await diagnostics();
     res.json({
         ...runtime,
-        status: runtime.docker.status === 'ok' && runtime.runner.status === 'ok' ? 'ok' : 'degraded',
         hostname: process.env.HOSTNAME,
         timeoutSeconds: Number(readConfig().timeoutValue),
         port,
@@ -89,7 +88,7 @@ app.get('/status', async (req, res) => {
         totalRunRequests,
         rejectedRequests,
         runnerImage: process.env.EXECUTION_RUNNER_IMAGE || 'umple-code-runner:dev',
-        runnerAutoBuild: process.env.EXECUTION_RUNNER_AUTO_BUILD === '1',
+        runnerAutoBuild: runtime.runner.autoBuild,
     });
 });
 
