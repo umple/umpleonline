@@ -251,7 +251,24 @@ func TestResolveBundledPathBasedLegacyExample(t *testing.T) {
 		t.Fatalf("create model store: %v", err)
 	}
 
-	handler := NewExampleHandler(&config.Config{ExamplePath: bundledExamplesRoot()}, store)
+	// Only the manifest ships with this repository; example sources come from
+	// the Umple library. The bundled manifest is therefore copied into an
+	// isolated root, and the single source this test needs is seeded there, so
+	// that a checkout without downloaded examples still exercises the real
+	// manifest's path-based entries.
+	root := t.TempDir()
+	bundledManifest, err := os.ReadFile(filepath.Join(bundledExamplesRoot(), exampleManifestFileName))
+	if err != nil {
+		t.Fatalf("read bundled manifest: %v", err)
+	}
+	writeTextFixture(t, filepath.Join(root, exampleManifestFileName), string(bundledManifest))
+
+	// No library URL, and a cache of its own, so neither the network nor a
+	// pre-existing runtime cache can satisfy the request.
+	handler := NewExampleHandler(&config.Config{
+		ExamplePath:      root,
+		ExampleCachePath: filepath.Join(t.TempDir(), "cache"),
+	}, store)
 	manifest, err := handler.loadManifest()
 	if err != nil {
 		t.Fatalf("load bundled manifest: %v", err)
@@ -260,6 +277,12 @@ func TestResolveBundledPathBasedLegacyExample(t *testing.T) {
 	_, example := mustFindExample(t, manifest, func(set ExampleSet, example ExampleEntry) bool {
 		return strings.Contains(example.Filename, "/")
 	})
+
+	source := filepath.Join(root, filepath.FromSlash(example.Filename))
+	if err := os.MkdirAll(filepath.Dir(source), 0o755); err != nil {
+		t.Fatalf("create bundled example dir: %v", err)
+	}
+	writeTextFixture(t, source, "class BundledPathExample {}")
 
 	legacyExample := normalizeLegacyExample(example.Filename)
 	req := httptest.NewRequest(http.MethodGet, "/api/examples/resolve?example="+legacyExample, nil)
@@ -279,6 +302,10 @@ func TestResolveBundledPathBasedLegacyExample(t *testing.T) {
 	if _, ok := manifest.byID[resp.ID]; !ok {
 		t.Fatalf("expected bundled resolve response id %q to exist in manifest", resp.ID)
 	}
+	if resp.Code != "class BundledPathExample {}" {
+		t.Fatalf("expected the seeded bundled source to be served, got %q", resp.Code)
+	}
+	assertCacheEntries(t, handler)
 }
 
 func TestResolveLibraryExampleFromUpstream(t *testing.T) {
