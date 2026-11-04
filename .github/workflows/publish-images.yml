@@ -31,6 +31,7 @@ jobs:
       packages: write
     env:
       UMPLESYNC_JAR_URL: https://try.umple.org/scripts/umplesync.jar
+      UMPLE_LIBRARY_URL: https://umple.org/umpleonline/umplibrary/
     steps:
       - uses: actions/checkout@v6
         with:
@@ -39,6 +40,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - uses: oven-sh/setup-bun@v2
 
       - name: Resolve latest LSP version
         id: lsp_version
@@ -75,6 +78,14 @@ jobs:
           curl -fL --retry 3 --retry-delay 5 "$UMPLESYNC_JAR_URL" -o jars/umplesync.jar
           sha256sum jars/umplesync.jar | tee jars/umplesync.jar.sha256
           echo "sha256=$(cut -d ' ' -f1 jars/umplesync.jar.sha256)" >> "$GITHUB_OUTPUT"
+
+      - name: Test example seed script
+        run: bun test scripts/
+
+      # The seed is the offline example cache baked into the backend image, so
+      # --verify-manifest refuses to publish unless every curated example arrived.
+      - name: Fetch Umple examples
+        run: bun scripts/fetch-examples.ts --library-url "$UMPLE_LIBRARY_URL" --verify-manifest
 
       - name: Build and push backend
         id: backend_build

@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/umple/umpleonline/backend/internal/config"
@@ -17,6 +20,12 @@ import (
 )
 
 const exampleManifestFileName = "example_manifest.json"
+
+const maxLibraryExampleBytes = 1 << 20
+
+// Example names may address subdirectories of the Umple library, but nothing
+// outside it. Classic UmpleOnline restricts the argument the same way.
+var libraryExamplePattern = regexp.MustCompile(`^[A-Za-z0-9_.\-/]+$`)
 
 type ExampleEntry struct {
 	ID       string `json:"id"`
@@ -63,6 +72,9 @@ type ExampleResponse struct {
 
 type ExampleHandler struct {
 	examplePath string
+	cachePath   string
+	libraryURL  string
+	client      *http.Client
 	store       *model.Store
 }
 
@@ -111,7 +123,15 @@ func (e *fetchError) Unwrap() error {
 func NewExampleHandler(cfg *config.Config, store *model.Store) *ExampleHandler {
 	return &ExampleHandler{
 		examplePath: cfg.ExamplePath,
-		store:       store,
+		cachePath:   cfg.ExampleCachePath,
+		libraryURL:  cfg.ExampleLibrary,
+		client: &http.Client{
+			Timeout: 5 * time.Second,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+		store: store,
 	}
 }
 
@@ -141,7 +161,12 @@ func (h *ExampleHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 
 	id, ok := manifest.byLegacyExample[legacyExample]
 	if !ok {
-		writeError(w, http.StatusNotFound, "example not found")
+		spec, valid := libraryExampleSpec(legacyExample)
+		if !valid {
+			writeError(w, http.StatusNotFound, "example not found")
+			return
+		}
+		h.respondWithExample(w, spec)
 		return
 	}
 
@@ -271,8 +296,34 @@ func (h *ExampleHandler) buildManifest() (*exampleManifest, error) {
 	return manifest, nil
 }
 
+// exampleCode always tries the Umple library first so that the running site
+// follows upstream, then falls back to the runtime cache and finally to the
+// example files shipped with the backend.
 func (h *ExampleHandler) exampleCode(spec exampleSpec) (string, error) {
-	data, err := os.ReadFile(filepath.Join(h.examplePath, filepath.FromSlash(spec.sourcePath)))
+	if !safeExamplePath(spec.sourcePath) {
+		return "", &fetchError{status: http.StatusNotFound, err: os.ErrNotExist}
+	}
+
+	if h.libraryURL != "" {
+		if code, err := h.libraryExampleCode(spec.sourcePath); err == nil {
+			h.cacheExample(spec.sourcePath, code)
+			return code, nil
+		}
+	}
+
+	if code, err := readExampleFile(h.cachePath, spec.sourcePath); err == nil {
+		return code, nil
+	}
+
+	return readExampleFile(h.examplePath, spec.sourcePath)
+}
+
+func readExampleFile(root, sourcePath string) (string, error) {
+	if root == "" {
+		return "", &fetchError{status: http.StatusNotFound, err: os.ErrNotExist}
+	}
+
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(sourcePath)))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", &fetchError{status: http.StatusNotFound, err: err}
@@ -280,6 +331,88 @@ func (h *ExampleHandler) exampleCode(spec exampleSpec) (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+// cacheExample keeps the fetched example for the next time the library cannot
+// be reached. The example already loaded, so write failures are ignored.
+func (h *ExampleHandler) cacheExample(sourcePath, code string) {
+	if h.cachePath == "" {
+		return
+	}
+
+	target := filepath.Join(h.cachePath, filepath.FromSlash(sourcePath))
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return
+	}
+
+	// Replace the cached file atomically so an interrupted write cannot leave a
+	// truncated example behind.
+	temp, err := os.CreateTemp(filepath.Dir(target), ".example-*")
+	if err != nil {
+		return
+	}
+	if _, err := temp.WriteString(code); err != nil {
+		temp.Close()
+		os.Remove(temp.Name())
+		return
+	}
+	if err := temp.Close(); err != nil {
+		os.Remove(temp.Name())
+		return
+	}
+	if err := os.Rename(temp.Name(), target); err != nil {
+		os.Remove(temp.Name())
+	}
+}
+
+func (h *ExampleHandler) libraryExampleCode(sourcePath string) (string, error) {
+	resp, err := h.client.Get(strings.TrimRight(h.libraryURL, "/") + "/" + sourcePath)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("status %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxLibraryExampleBytes+1))
+	if err != nil {
+		return "", err
+	}
+	if len(data) > maxLibraryExampleBytes {
+		return "", fmt.Errorf("example exceeds %d bytes", maxLibraryExampleBytes)
+	}
+	return string(data), nil
+}
+
+// libraryExampleSpec describes an example that the bundled manifest does not
+// list, so that it can be loaded from the Umple library by path.
+func libraryExampleSpec(legacyExample string) (exampleSpec, bool) {
+	if !safeExamplePath(legacyExample) {
+		return exampleSpec{}, false
+	}
+
+	sourcePath := legacyExample + ".ump"
+	name := path.Base(legacyExample)
+	return exampleSpec{
+		entry: ExampleEntry{
+			ID:       stableExampleID("", sourcePath),
+			Name:     name,
+			Label:    name,
+			Filename: sourcePath,
+		},
+		sourcePath: sourcePath,
+	}, true
+}
+
+// safeExamplePath reports whether a name addresses a file inside the Umple
+// library, so that it can neither leave the library nor leave the cache.
+func safeExamplePath(name string) bool {
+	return libraryExamplePattern.MatchString(name) &&
+		path.Clean(name) == name &&
+		!path.IsAbs(name) &&
+		!strings.HasPrefix(name, "..")
 }
 
 func stableExampleID(setID ExampleSetID, raw string) string {
