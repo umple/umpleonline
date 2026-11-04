@@ -18,9 +18,9 @@ func IsTemporary(id string) bool {
 	return strings.HasPrefix(id, "tmp")
 }
 
-// DefaultEntryFile is the fallback filename used when no tabs.json exists
-// (backward compatibility with pre-tab models). The frontend may use any
-// name — the backend does not enforce a specific tab name.
+// DefaultEntryFile is used for new models and tabless modern saves. Legacy
+// saves discover their lowercase entry point through LoadTabs. The frontend
+// may use any name — the backend does not enforce a specific tab name.
 const DefaultEntryFile = "Model.ump"
 
 // TabMeta is the metadata for a single editor tab (id + display name).
@@ -209,13 +209,13 @@ func EnsureUmpExt(name string) string {
 }
 
 // LoadTabs reads tab metadata from {modelDir}/tabs.json.
-// Returns nil, nil if the file does not exist (backward compat).
+// Without metadata, discover the source tabs of legacy model.ump directories.
 func (s *Store) LoadTabs(modelID string) (*TabsData, error) {
 	dir := s.ModelDir(modelID)
 	b, err := os.ReadFile(filepath.Join(dir, "tabs.json"))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
+			return legacyTabs(dir)
 		}
 		return nil, fmt.Errorf("read tabs: %w", err)
 	}
@@ -224,6 +224,41 @@ func (s *Store) LoadTabs(modelID string) (*TabsData, error) {
 		return nil, fmt.Errorf("unmarshal tabs: %w", err)
 	}
 	return &data, nil
+}
+
+// legacyTabs preserves filenames and all source tabs so saving an imported model
+// cannot delete files referenced by its use statements. ReadDir checks exact case
+// even on development machines with case-insensitive filesystems.
+func legacyTabs(dir string) (*TabsData, error) {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	hasLegacy, hasModern := false, false
+	for _, entry := range entries {
+		if entry.Type().IsRegular() {
+			hasLegacy = hasLegacy || entry.Name() == "model.ump"
+			hasModern = hasModern || entry.Name() == DefaultEntryFile
+		}
+	}
+	if !hasLegacy || hasModern {
+		return nil, nil
+	}
+	data := &TabsData{ActiveTabID: "main", Tabs: []TabMeta{{ID: "main", Name: "model.ump"}}}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.Type().IsRegular() || name == "model.ump" || strings.HasPrefix(name, ".") || !strings.HasSuffix(name, ".ump") {
+			continue
+		}
+		if _, err := SafeTabName(name); err != nil {
+			return nil, err
+		}
+		data.Tabs = append(data.Tabs, TabMeta{ID: name, Name: name})
+	}
+	return data, nil
 }
 
 // ReadTabCode reads a single tab's code from its .ump file on disk.

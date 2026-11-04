@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -102,5 +103,65 @@ func TestModelHandlerGet_StripsHiddenLayoutFromTabbedActiveFile(t *testing.T) {
 	}
 	if resp.Tabs[1].Code != "use Model.ump;\nclass Other {}" {
 		t.Fatalf("secondary tab code = %q", resp.Tabs[1].Code)
+	}
+}
+
+func TestLegacyModelLoadEditReopen(t *testing.T) {
+	h, store := newTestModelHandler(t)
+	id := "160101legacy"
+	dir := store.ModelDir(id)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	source := "use Other.ump;\nclass Legacy {}\n" + modelDelimiter + "\nclass Legacy { position 10 20 30 40; }\n"
+	for name, code := range map[string]string{"model.ump": source, "Other.ump": "class Other {}", ".generate-java.ump": "generated"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(code), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	load := func() []apiTab {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		h.Get(rec, addChiParam(httptest.NewRequest("GET", "/api/models/"+id, nil), "id", id))
+		if rec.Code != 200 {
+			t.Fatalf("status %d: %s", rec.Code, rec.Body)
+		}
+		var res struct {
+			ModelID     string   `json:"modelId"`
+			ActiveTabID string   `json:"activeTabId"`
+			Tabs        []apiTab `json:"tabs"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+			t.Fatal(err)
+		}
+		if res.ModelID != id || res.ActiveTabID != "main" || len(res.Tabs) != 2 || res.Tabs[0].Name != "model.ump" {
+			t.Fatalf("legacy response: %+v", res)
+		}
+		return res.Tabs
+	}
+	tabs := load()
+	if strings.Contains(tabs[0].Code, "position") {
+		t.Fatal("layout leaked into editor")
+	}
+	entry := resolveEntryFile(store, id, "main")
+	if entry != "model.ump" {
+		t.Fatalf("entry = %q", entry)
+	}
+	updated := "use Other.ump;\nclass Legacy { String name; }"
+	if _, _, err := resolveModel(store, id, updated, entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveTabFiles(id, map[string]string{"model.ump": updated, "Other.ump": tabs[1].Code}, entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveTabs(id, &backendmodel.TabsData{ActiveTabID: "main", Tabs: []backendmodel.TabMeta{{ID: "main", Name: "model.ump"}, {ID: "Other.ump", Name: "Other.ump"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := load()[0].Code; got != updated {
+		t.Fatalf("reopened source: %q", got)
+	}
+	stored, err := os.ReadFile(filepath.Join(dir, entry))
+	if err != nil || !strings.Contains(string(stored), "position 10 20") {
+		t.Fatalf("layout lost: %s, %v", stored, err)
 	}
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { useSessionStore } from "../stores/sessionStore";
 import { useCollabStore } from "../stores/collabStore";
 import { useEphemeralStore } from "../stores/ephemeralStore";
@@ -11,8 +12,21 @@ import { api } from "../api/client";
 const initialParams = new URLSearchParams(window.location.search);
 
 /** The URL model param read once at module load — before any React effect. */
-const initialUrlModelId = initialParams.get("model");
-const initialUrlExample = initialParams.get("example");
+const initialUrlModelId = initialParams.get("model") || null;
+// Match legacy source precedence; a saved bookmark always wins.
+const initialUrlExample = initialUrlModelId
+  ? null
+  : initialParams.get("example") || null;
+// The legacy manual's Documenter_Code.ump double-encodes plus signs. Decode
+// that known escape only; decoding the whole source again would corrupt % text.
+const initialText = initialUrlModelId || initialUrlExample
+  ? null
+  : initialParams.get("text")?.replace(/%2B/gi, "+") ?? null;
+const initialFilename = initialUrlModelId || initialUrlExample || initialText !== null
+  ? null
+  : initialParams.get("filename");
+const hasExplicitSource = !!initialUrlModelId || !!initialUrlExample
+  || initialText !== null || initialFilename !== null;
 
 /** Legacy ?diagramtype= param (GvClass, state, etc.). */
 const initialDiagramType = initialParams.get("diagramtype");
@@ -38,14 +52,13 @@ function readStoredModelId(): string | null {
   }
 }
 
-const initialStoreModelId =
-  initialUrlModelId || initialUrlExample ? null : readStoredModelId();
+const initialStoreModelId = hasExplicitSource ? null : readStoredModelId();
 
 /** The model ID to restore on mount — URL takes priority over sessionStorage. */
 const initialModelId = initialUrlModelId ?? initialStoreModelId;
 
-/** True when any startup loading (model or example) needs to resolve first. */
-const needsResolve = !!(initialModelId || initialUrlExample);
+/** True when a startup source needs to resolve before compilation. */
+const needsResolve = hasExplicitSource || !!initialModelId;
 
 /**
  * True once the initial model (from URL or sessionStorage) has been
@@ -57,6 +70,7 @@ export let urlModelResolved = !needsResolve;
 /**
  * On mount, reads URL params and applies them:
  * - `?model=<id>` loads a saved model
+ * - `?example=<name>`, `?text=<source>`, or `?filename=<url>` loads fresh source
  * - `?diagramtype=<type>` sets the diagram view mode
  * - `?readOnly` enables read-only mode
  * - `?generateDefault=<lang>` sets the default generate target
@@ -64,7 +78,6 @@ export let urlModelResolved = !needsResolve;
  * After compilation assigns a modelId, syncs permanent IDs back to the URL.
  */
 export function useModelFromURL() {
-  const setCode = useSessionStore((s) => s.setCode);
   const setModelId = useSessionStore((s) => s.setModelId);
   const restoreTabs = useSessionStore((s) => s.restoreTabs);
   const loadExample = useSessionStore((s) => s.loadExample);
@@ -103,99 +116,69 @@ export function useModelFromURL() {
   }, []);
 
   useEffect(() => {
-    if (!initialUrlExample) return;
-
-    let cancelled = false;
-
-    api
-      .resolveExample(initialUrlExample)
-      .then((res) => {
-        if (cancelled) return;
-        loadExample(res.id, res.name, res.code, res.modelId, res.setId ?? null);
-
-        if (!initialDiagramType && res.defaultCategoryId) {
-          const nextView = getDefaultViewForExampleCategory(
-            res.defaultCategoryId,
-          );
-          if (nextView) setViewMode(nextView);
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        const url = new URL(window.location.href);
-        url.searchParams.delete("example");
-        window.history.replaceState({}, "", url.toString());
-      })
-      .finally(() => {
-        if (cancelled) return;
-        urlModelResolved = true;
-        resolvedRef.current = true;
-        useSessionStore.setState((s) => ({ tabsVersion: s.tabsVersion + 1 }));
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loadExample, setViewMode]);
-
-  // Load model from ?model= or sessionStorage on mount.
-  useEffect(() => {
-    if (initialUrlExample) return;
-    if (!initialModelId) return;
-
+    if (!needsResolve) return;
     const abort = new AbortController();
 
-    api
-      .getModel(initialModelId, abort.signal)
-      .then((res) => {
-        if (abort.signal.aborted) return;
-        if (res.tabs?.length) {
-          restoreTabs(res.tabs, res.activeTabId ?? res.tabs[0].id);
-        } else {
-          setCode(res.code);
-        }
-        setModelId(res.modelId);
+    // Detach persisted tabs and model identity before resolving an explicit link.
+    // Compilation stays gated until the entire source has been installed.
+    if (hasExplicitSource) {
+      useSessionStore.setState({ modelId: null });
+      restoreTabs([{ id: "main", name: "Model.ump", code: "" }], "main");
+    }
 
-        // Auto-start collab for permanent models loaded from the URL.
-        // Permanent model URLs are always collab-enabled — if a room exists
-        // the user joins it; otherwise a new room is created.
-        if (initialUrlModelId && !isTemporaryModel(res.modelId)) {
-          useCollabStore.getState().startCollab(res.modelId);
+    async function resolve() {
+      try {
+        if (initialModelId) {
+          const res = await api.getModel(initialModelId, abort.signal);
+          if (abort.signal.aborted) return;
+          const tabs = res.tabs?.length
+            ? res.tabs
+            : [{ id: "main", name: "Model.ump", code: res.code }];
+          restoreTabs(tabs, res.activeTabId ?? tabs[0].id);
+          setModelId(res.modelId);
+          if (initialUrlModelId && !isTemporaryModel(res.modelId)) {
+            useCollabStore.getState().startCollab(res.modelId);
+          }
+        } else if (initialUrlExample) {
+          const res = await api.resolveExample(initialUrlExample, abort.signal);
+          if (abort.signal.aborted) return;
+          loadExample(res.id, res.name, res.code, res.modelId, res.setId ?? null);
+          if (!initialDiagramType && res.defaultCategoryId) {
+            const nextView = getDefaultViewForExampleCategory(res.defaultCategoryId);
+            if (nextView) setViewMode(nextView);
+          }
+        } else if (initialText !== null || initialFilename !== null) {
+          const code = initialText
+            ?? (await api.loadSource(initialFilename!, abort.signal)).code;
+          if (abort.signal.aborted) return;
+          restoreTabs([{ id: "main", name: "Model.ump", code }], "main");
         }
-      })
-      .catch((err) => {
-        if (abort.signal.aborted || err.name === "AbortError") return;
-        // Model not found or expired — clean up
-        if (initialUrlModelId) {
-          const url = new URL(window.location.href);
-          url.searchParams.delete("model");
-          window.history.replaceState({}, "", url.toString());
-        }
-        // Clear stale modelId and bump tabsVersion so the compile effect
-        // fires with a clean slate.
-        useSessionStore.setState((s) => ({
-          modelId: null,
-          tabsVersion: s.tabsVersion + 1,
-        }));
-      })
-      .finally(() => {
+      } catch (err) {
         if (abort.signal.aborted) return;
-        urlModelResolved = true;
-        resolvedRef.current = true;
-        // Force the compile effect to re-fire now that urlModelResolved is true.
-        useSessionStore.setState((s) => ({ tabsVersion: s.tabsVersion + 1 }));
-      });
-
+        useSessionStore.setState({ modelId: null });
+        toast.error("Could not load model", {
+          description: err instanceof Error ? err.message : "Please check the link and try again.",
+        });
+      } finally {
+        if (!abort.signal.aborted) {
+          urlModelResolved = true;
+          resolvedRef.current = true;
+          useSessionStore.setState((s) => ({ tabsVersion: s.tabsVersion + 1 }));
+        }
+      }
+    }
+    void resolve();
     return () => abort.abort();
-  }, [setCode, setModelId, restoreTabs]);
+  }, [loadExample, restoreTabs, setModelId, setViewMode]);
 
   // Sync modelId to URL whenever it changes — only for permanent IDs.
   useEffect(() => {
-    if (!resolvedRef.current) return;
+    if (!resolvedRef.current || modelId !== useSessionStore.getState().modelId) return;
 
     const url = new URL(window.location.href);
     if (modelId && !isTemporaryModel(modelId)) {
       url.searchParams.set("model", modelId);
+      for (const key of ["example", "text", "filename"]) url.searchParams.delete(key);
     } else {
       url.searchParams.delete("model");
     }
