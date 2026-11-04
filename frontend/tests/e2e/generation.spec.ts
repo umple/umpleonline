@@ -352,6 +352,62 @@ test.describe('Generation UI', () => {
     )
   })
 
+  test('keeps an explicit generateDefault as the output target after the example loads', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+    await installStateExampleRoute(page)
+
+    await page.goto('/?example=MicrowaveOven2&generateDefault=Java')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await expect
+      .poll(() => getLastRequest(requests)?.language)
+      .toBe('Java')
+    await expect(page.getByTestId('generated-output-highlighted-all-code')).toContainText(
+      'InvoiceGenerated',
+      { timeout: 10_000 },
+    )
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText('Java Code')
+    expect(requests.some((request) => request.diagramType === 'GvStateDiagram')).toBe(false)
+  })
+
+  test('keeps generateDefault as the output target when diagramtype is also requested', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+    await installStateExampleRoute(page)
+
+    await page.goto('/?example=MicrowaveOven2&generateDefault=Java&diagramtype=state')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await expect
+      .poll(() => getLastRequest(requests)?.language)
+      .toBe('Java')
+    await expect(page.getByTestId('generated-output-highlighted-all-code')).toContainText(
+      'InvoiceGenerated',
+      { timeout: 10_000 },
+    )
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText('Java Code')
+  })
+
+  test('falls back to the example category default for an invalid generateDefault', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+    await installStateExampleRoute(page)
+
+    await page.goto('/?example=MicrowaveOven2&generateDefault=NotALanguage')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvStateDiagram')
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText(
+      'State Diagram (GraphViz SVG)',
+    )
+  })
+
   test('keeps all generated code visible by default and offers per-file tabs', async ({ page }) => {
     const requests: GenerationRequest[] = []
     await addPreferencesInitScript(page, { dynamicGeneration: false })

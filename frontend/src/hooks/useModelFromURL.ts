@@ -25,6 +25,22 @@ const initialReadOnly = initialParams.has("readOnly");
 const initialGenerateDefault = initialParams.get("generateDefault");
 
 /**
+ * Resolves ?generateDefault= to a known generate target ID, case-insensitively:
+ * exact match first, then a capitalized match for IDs like "Java", "Python".
+ * Returns null when the param is absent or names no known target.
+ */
+function resolveInitialGenerateTargetId(): string | null {
+  if (!initialGenerateDefault) return null;
+  if (getGenerateTarget(initialGenerateDefault)) return initialGenerateDefault;
+  const lower = initialGenerateDefault.toLowerCase();
+  const capitalized = lower.charAt(0).toUpperCase() + lower.slice(1);
+  return getGenerateTarget(capitalized) ? capitalized : null;
+}
+
+/** The explicitly requested generate target, or null when absent/invalid. */
+const initialGenerateTargetId = resolveInitialGenerateTargetId();
+
+/**
  * Read the persisted modelId from sessionStorage (Zustand hydrates async, so
  * we read the raw storage to get the value synchronously at module load).
  */
@@ -99,19 +115,9 @@ export function useModelFromURL() {
       useEphemeralStore.getState().setReadOnly(true);
     }
 
-    // ?generateDefault=
-    if (initialGenerateDefault) {
-      // Case-insensitive lookup: try exact match first, then lowercase match.
-      if (getGenerateTarget(initialGenerateDefault)) {
-        useSessionStore.getState().setGenerateTargetId(initialGenerateDefault);
-      } else {
-        const lower = initialGenerateDefault.toLowerCase();
-        // Capitalize first letter to match target IDs like "Java", "Python".
-        const capitalized = lower.charAt(0).toUpperCase() + lower.slice(1);
-        if (getGenerateTarget(capitalized)) {
-          useSessionStore.getState().setGenerateTargetId(capitalized);
-        }
-      }
+    // ?generateDefault= — applied last so it outranks ?diagramtype='s target.
+    if (initialGenerateTargetId) {
+      useSessionStore.getState().setGenerateTargetId(initialGenerateTargetId);
     }
   }, []);
 
@@ -133,7 +139,11 @@ export function useModelFromURL() {
           if (nextView) {
             const targetId = getGenerateTargetIdForView(nextView);
             setViewMode(nextView);
-            if (targetId) useSessionStore.getState().setGenerateTargetId(targetId);
+            // The category only supplies a default: an explicit
+            // ?generateDefault= keeps the target it already selected.
+            if (targetId && !initialGenerateTargetId) {
+              useSessionStore.getState().setGenerateTargetId(targetId);
+            }
           }
         }
       })
