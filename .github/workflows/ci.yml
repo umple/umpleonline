@@ -20,7 +20,8 @@ concurrency:
 jobs:
   frontend:
     name: Frontend
-    runs-on: ubuntu-latest
+    # Playwright 1.58 cannot install Chromium on ubuntu-latest (now 26.04), so pin the previous LTS.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
       run:
