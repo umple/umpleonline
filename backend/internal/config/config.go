@@ -13,6 +13,7 @@ type Config struct {
 	UmplePort      int
 	ModelStorePath string
 	ExamplePath    string
+	ExampleLibrary string
 	ExecutionURL   string
 	CollabURL      string
 	LSPURL         string
@@ -27,6 +28,7 @@ func Load() *Config {
 		UmplePort:      getEnvInt("UMPLE_PORT", 5555),
 		ModelStorePath: getEnv("MODEL_STORE_PATH", "/data/models"),
 		ExamplePath:    getEnv("EXAMPLE_PATH", "/examples"),
+		ExampleLibrary: getEnv("EXAMPLE_LIBRARY_URL", "https://umple.org/umpleonline/umplibrary"),
 		ExecutionURL:   getExecutionURL(),
 		CollabURL:      getCollabURL(),
 		LSPURL:         getLSPURL(),
