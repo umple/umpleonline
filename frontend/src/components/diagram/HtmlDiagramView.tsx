@@ -1,15 +1,120 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type { DiagramView } from '../../stores/sessionStore'
 import { useIsDark } from '../../hooks/useIsDark'
+import {
+  EVENT_SEQUENCE_MESSAGE_SOURCE,
+  isEventSequenceMessage,
+  toDiagramSelectDetail,
+} from './eventSequenceSelection'
 
 interface HtmlDiagramViewProps {
   html: string
   viewMode?: DiagramView
 }
 
+// Click delegation injected into the Event Sequence iframe only. The sandbox has no
+// allow-same-origin, so the parent cannot read this DOM; the script reports the
+// compiler metadata it finds and leaves every interpretation to the parent.
+const EVENT_SEQUENCE_BRIDGE_SCRIPT = `
+(function () {
+  function post(payload) {
+    payload.source = '${EVENT_SEQUENCE_MESSAGE_SOURCE}';
+    window.parent.postMessage(payload, '*');
+  }
+
+  function sectionHeading(element) {
+    var section = element.closest('.event-sequence-grid, .event-sequence-list');
+    if (!section) return '';
+    var node = section.previousElementSibling;
+    while (node) {
+      if (node.tagName === 'H2') return (node.textContent || '').trim();
+      node = node.previousElementSibling;
+    }
+    return '';
+  }
+
+  // Row headers carry a 'data-parent' index into the preceding row headers, so the
+  // dotted path has to be rebuilt by walking that chain.
+  function stateRowName(cell) {
+    var column = cell.closest('.floating-col');
+    if (!column) return '';
+    var cells = Array.prototype.slice.call(column.querySelectorAll('td'));
+    var index = cells.indexOf(cell);
+    if (index < 1) return '';
+
+    var names = [];
+    for (var i = 1; i < cells.length; i++) {
+      var label = (cells[i].textContent || '').replace(/^(?:-\\s+)*/, '').trim();
+      var parentIndex = parseInt(cells[i].getAttribute('data-parent'), 10);
+      var prefix = isNaN(parentIndex) || typeof names[parentIndex] !== 'string'
+        ? ''
+        : names[parentIndex] + '.';
+      names.push(prefix + label);
+    }
+
+    return names[index - 1] || '';
+  }
+
+  function nextStateName(cell) {
+    var row = cell.closest('tr');
+    if (!row || !row.closest('table.event-sequence-list')) return '';
+    // The header row labels its columns instead of naming a state.
+    if (cell.classList.contains('column-header')) return '';
+    var cells = Array.prototype.slice.call(row.querySelectorAll('td'));
+    // Only the third column holds a state; the START row's is the initial state.
+    if (cells.indexOf(cell) !== 2) return '';
+    return (cell.textContent || '').trim();
+  }
+
+  document.addEventListener('click', function (event) {
+    var target = event.target;
+    if (!target || typeof target.closest !== 'function') return;
+
+    var transitionCell = target.closest('[data-transition]');
+    if (transitionCell) {
+      var transitionId = transitionCell.getAttribute('data-transition') || '';
+      if (transitionId) post({ kind: 'transition', transitionId: transitionId });
+      return;
+    }
+
+    var cell = target.closest('td');
+    if (!cell) return;
+
+    var dottedState = cell.classList.contains('row-header') && cell.hasAttribute('data-parent')
+      ? stateRowName(cell)
+      : nextStateName(cell);
+    if (!dottedState) return;
+
+    post({ kind: 'state', heading: sectionHeading(cell), dottedState: dottedState });
+  });
+})();
+`
+
 /** Renders jar HTML output (EventSequence, StateTables, StructureDiagram) in a sandboxed iframe */
 export function HtmlDiagramView({ html, viewMode }: HtmlDiagramViewProps) {
   const isDark = useIsDark()
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const isEventSequence = viewMode === 'eventSequence'
+
+  // Bridge Event Sequence clicks to the selection event the editor already handles.
+  useEffect(() => {
+    if (!isEventSequence) return
+
+    const handler = (event: MessageEvent) => {
+      // The sandbox gives the frame an opaque origin, so identify the sender by the
+      // window itself rather than by event.origin.
+      if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return
+      if (!isEventSequenceMessage(event.data)) return
+
+      const detail = toDiagramSelectDetail(event.data)
+      if (!detail) return
+
+      window.dispatchEvent(new CustomEvent('umple:diagram-select', { detail }))
+    }
+
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [isEventSequence])
 
   const srcDoc = useMemo(() => {
     // Use the design-token values so they stay in sync with the main app theme
@@ -162,9 +267,10 @@ export function HtmlDiagramView({ html, viewMode }: HtmlDiagramViewProps) {
   ${darkOverrides}
   ${structureDarkOverrides}
 </style>
+${isEventSequence ? `<script>${EVENT_SEQUENCE_BRIDGE_SCRIPT}</script>` : ''}
 </body>
 </html>`
-  }, [html, isDark, viewMode])
+  }, [html, isDark, viewMode, isEventSequence])
 
   if (!html) {
     return (
@@ -176,6 +282,7 @@ export function HtmlDiagramView({ html, viewMode }: HtmlDiagramViewProps) {
 
   return (
     <iframe
+      ref={iframeRef}
       srcDoc={srcDoc}
       sandbox="allow-scripts"
       title="Diagram output"
