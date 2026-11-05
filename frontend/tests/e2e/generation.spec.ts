@@ -624,3 +624,56 @@ test.describe('Generation UI', () => {
     expect(getLastRequest(requests)?.language).toBe('javadoc')
   })
 })
+
+
+test('common output shortcuts work with automatic generation disabled', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 })
+  const requests: GenerationRequest[] = []
+  await addPreferencesInitScript(page, { dynamicGeneration: false })
+  await installGenerationRoutes(page, requests)
+  await page.goto('/')
+  await setEditorCode(page, 'class Invoice { number; }')
+
+  await expect(page.getByTestId('execute-button')).toBeInViewport()
+  await page.getByTestId('quick-output-Java').click()
+  await expect(page.getByTestId('generated-output-all-code')).toContainText('public class InvoiceGenerated')
+  expect(getLastRequest(requests)?.language).toBe('Java')
+
+  await page.getByTestId('quick-output-classDiagram').click()
+  await expect(page.getByTestId('quick-output-classDiagram')).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() => getLastRequest(requests)?.diagramType).toBe('GvClassDiagram')
+  await expect(page.getByTestId('generated-output-all-code')).toBeHidden()
+
+  await page.getByTestId('quick-output-stateDiagram').click()
+  await expect.poll(() => getLastRequest(requests)?.diagramType).toBe('GvStateDiagram')
+  await expect(page.getByTestId('quick-output-stateDiagram')).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('executes from a diagram without generating visible code and offers Python execution', async ({ page }) => {
+  const requests: GenerationRequest[] = []
+  const executions: Array<{ language: string; code: string; tabs: Array<{ code: string }> }> = []
+  await addPreferencesInitScript(page, { dynamicGeneration: false })
+  await installGenerationRoutes(page, requests)
+  await page.route('**/api/execute', async (route) => {
+    executions.push(route.request().postDataJSON())
+    await route.fulfill({ json: { output: 'Program output', modelId: 'execution-model' } })
+  })
+  await page.goto('/')
+  await setEditorCode(page, 'class Invoice { number; }')
+  await page.getByTestId('quick-output-classDiagram').click()
+  await expect.poll(() => requests.length).toBe(1)
+  await expect(page.getByTestId('quick-output-classDiagram')).toBeEnabled()
+
+  await page.getByTestId('execute-button').click()
+  await expect(page.getByTestId('output-panel')).toContainText('Program output')
+  expect(executions[0]).toMatchObject({ language: 'Java', code: 'class Invoice { number; }', tabs: [{ code: 'class Invoice { number; }' }] })
+  expect(requests).toHaveLength(1)
+  await expect(page.getByTestId('quick-output-classDiagram')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('generated-output-all-code')).toBeHidden()
+
+  await page.getByRole('button', { name: 'Execution language', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Execute Python', exact: true }).click()
+  await expect.poll(() => executions.length).toBe(2)
+  expect(executions[1]?.language).toBe('Python')
+  await expect(page.getByTestId('quick-output-classDiagram')).toHaveAttribute('aria-pressed', 'true')
+})

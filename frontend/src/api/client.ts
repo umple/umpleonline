@@ -1,4 +1,5 @@
 import type {
+  ApiTab,
   GenerationRequest,
   GenerationResponse,
   ExampleSet,
@@ -123,7 +124,8 @@ export const api = {
     language: string;
     modelId?: string;
     activeTabId?: string;
-  }): Promise<{ output: string; errors?: string }> {
+    tabs?: ApiTab[];
+  }): Promise<{ output: string; errors?: string; modelId: string }> {
     return request("/execute", {
       method: "POST",
       body: JSON.stringify(req),

@@ -4,6 +4,8 @@ import { useEphemeralStore } from '../stores/ephemeralStore'
 import { useIsDark } from './useIsDark'
 import { api } from '../api/client'
 import { generateAndRefresh } from './useCompiler'
+import { getCompileSourceSnapshot } from '../lib/compileSource'
+import { getGenerateTarget } from '../generation/targets'
 
 /** Sends code to the backend execute endpoint (code-exec service). */
 export function useExecute() {
@@ -14,14 +16,20 @@ export function useExecute() {
     runningRef.current = true
 
     const { setExecutionOutput, setOutputView, setExecuting } = useEphemeralStore.getState()
+    useEphemeralStore.getState().setDiagramOnly(false)
     setOutputView('panel')
     setExecutionOutput('')
     setExecuting(true)
 
-    const { code, modelId, activeTabId } = useSessionStore.getState()
-    const language = languageOverride || useEphemeralStore.getState().generatedLanguage
+    const { modelId, generateTargetId } = useSessionStore.getState()
+    const { activeCode: code, activeTabId, tabs } = getCompileSourceSnapshot()
+    const target = getGenerateTarget(generateTargetId)
+    const language = languageOverride || (target?.executable ? target.id : 'Java')
     try {
-      const result = await api.execute({ code, language, activeTabId, modelId: modelId ?? undefined })
+      const result = await api.execute({ code, language, activeTabId, tabs, modelId: modelId ?? undefined })
+      if (result.modelId && !useSessionStore.getState().modelId) {
+        useSessionStore.getState().setModelId(result.modelId)
+      }
       setExecutionOutput(result.output || '', result.errors || null)
     } catch (err: unknown) {
       setExecutionOutput('', err instanceof Error ? err.message : 'Execution failed')
