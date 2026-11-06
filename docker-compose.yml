@@ -22,6 +22,11 @@ services:
       - COLLAB_PORT=${COLLAB_PORT:-3002}
       - LSP_PORT=${LSP_PORT:-9999}
       - PORT=${BACKEND_PORT:-3001}
+      - SOURCE_COMMIT=${SOURCE_COMMIT:-}
+      - SOURCE_REF=${SOURCE_REF:-}
+      - SOURCE_REF_NAME=${SOURCE_REF_NAME:-}
+      - SOURCE_REF_TYPE=branch
+      - BUILD_TIME=${BUILD_TIME:-}
     depends_on:
       code-exec:
         condition: service_healthy
@@ -73,6 +78,7 @@ services:
       - "${CODE_EXEC_PORT:-4401}:${CODE_EXEC_PORT:-4401}"
     environment:
       - PORT=${CODE_EXEC_PORT:-4401}
+      - STATUS_COMPOSE_PROJECT=${COMPOSE_PROJECT_NAME:-umpleonline-dev}
       - EXECUTION_RUNNER_IMAGE=${CODE_RUNNER_IMAGE:-umple-code-runner:dev}
       - EXECUTION_RUNNER_AUTO_BUILD=1
     group_add:

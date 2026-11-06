@@ -2,6 +2,11 @@
 
 UMPLESYNC_JAR_URL ?= https://try.umple.org/scripts/umplesync.jar
 export UMPLE_LSP_VERSION ?= $(shell npm view umple-lsp-server version 2>/dev/null || echo latest)
+# Development images have no Git checkout; supply repository provenance.
+export SOURCE_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null)
+export SOURCE_REF ?= $(shell git symbolic-ref HEAD 2>/dev/null)
+export SOURCE_REF_NAME ?= $(shell git branch --show-current 2>/dev/null)
+export BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 export DOCKER_GID := $(shell stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)
 LEGACY_UMPLE_GIT_URL ?= https://github.com/umple/umple.git
 LEGACY_UMPLE_REF ?= master

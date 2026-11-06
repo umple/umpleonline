@@ -50,6 +50,8 @@ func NewRouter(cfg *config.Config, pool *compiler.Pool, store *model.Store, task
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", healthH.Health)
 		r.Get("/status", statusH.Status)
+		r.Get("/status/summary", statusH.Summary)
+		r.Post("/status/visit", statusH.RecordVisit)
 		r.Post("/status/session", statusH.RecordSession)
 
 		// Generate (includes compilation)
