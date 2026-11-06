@@ -1,3 +1,8 @@
+/**
+ * Jumps the editor to the line named in a compiler message, switching tabs when the message names a file.
+ * The message pane calls this when a line number or error link is clicked.
+ */
+
 import { EditorSelection } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 

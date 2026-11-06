@@ -1,3 +1,8 @@
+/**
+ * Applies the agent's search-and-replace edits and builds the diff shown in the editor.
+ * The editCode tool calls applyCodeEdits. useDiffPreviewSync publishes the preview into ephemeralStore.
+ */
+
 export interface CodeEdit {
   oldText: string
   newText: string

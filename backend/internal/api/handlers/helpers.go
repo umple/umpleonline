@@ -1,4 +1,9 @@
+// Package handlers implements the /api HTTP handlers.
+// Each file owns one route group. internal/api/router.go mounts them.
 package handlers
+
+// These helpers resolve which on-disk model and entry file a request should use, and serialize writes to that directory.
+// The other handlers call these helpers before they talk to the compiler.
 
 import (
 	"encoding/json"

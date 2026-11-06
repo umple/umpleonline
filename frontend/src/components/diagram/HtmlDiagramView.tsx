@@ -1,3 +1,8 @@
+/**
+ * Sandboxed iframe for diagram HTML the compiler produced, such as a structure diagram.
+ * DiagramPanel uses this when the generate target's output is HTML rather than SVG or React Flow.
+ */
+
 import { useMemo } from 'react'
 import type { DiagramView } from '../../stores/sessionStore'
 import { useIsDark } from '../../hooks/useIsDark'

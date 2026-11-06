@@ -1,5 +1,8 @@
 package handlers
 
+// GET /api/models/{id} loads a model for a shared link. POST /api/models/{id}/promote keeps a temporary one.
+// The store in package model does the disk work. This handler is the HTTP edge.
+
 import (
 	"encoding/json"
 	"errors"

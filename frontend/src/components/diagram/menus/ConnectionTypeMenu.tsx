@@ -1,3 +1,8 @@
+/**
+ * Chooses association or generalization when the user draws a line between two classes.
+ * UmpleDiagram opens it at the pointer, then sends the choice through useDiagramSync.
+ */
+
 import { useRef } from 'react'
 import { ArrowRight, Triangle } from 'lucide-react'
 import { useMenuClose } from '@/hooks/useMenuClose'

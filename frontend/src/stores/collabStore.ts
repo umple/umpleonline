@@ -1,3 +1,8 @@
+/**
+ * Collaboration session: the room, whether the socket is up, and who else is here.
+ * CollabButton writes it. useCollab reads it to open and close the WebSocket.
+ */
+
 import { create } from 'zustand'
 
 export interface CollabUser {

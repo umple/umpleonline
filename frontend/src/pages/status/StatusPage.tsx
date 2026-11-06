@@ -1,3 +1,8 @@
+/**
+ * Diagnostics page at /status.
+ * Polls GET /api/status and renders compiler, disk, collab, LSP, and code-exec health.
+ */
+
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";

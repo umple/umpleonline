@@ -1,3 +1,8 @@
+/**
+ * The right-hand pane.
+ * Switches among the editable class diagram, SVG, compiler HTML, generated code, and the object explorer.
+ */
+
 import { type ReactNode, useCallback, useEffect } from 'react'
 import { AlertTriangle, BookOpen, Download } from 'lucide-react'
 import { toSvg, toPng } from 'html-to-image'

@@ -1,3 +1,8 @@
+/**
+ * Message pane under the editor.
+ * Shows compiler issues, Execute output, and the AI fix action on an error.
+ */
+
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { useEphemeralStore } from '../../stores/ephemeralStore'
 import type { ParsedIssue } from '../../stores/ephemeralStore'

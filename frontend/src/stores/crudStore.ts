@@ -1,3 +1,9 @@
+/**
+ * State for the object explorer.
+ * Holds the compiled schema, the instances the user creates, and the association links between them.
+ * ObjectExplorer and the instance diagram read this store.
+ */
+
 import { create } from 'zustand'
 import { api } from '@/api/client'
 import type { CrudSchema, CrudAssociation, CrudAttribute, CrudClass } from '@/api/types'

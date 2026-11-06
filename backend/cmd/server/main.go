@@ -1,3 +1,6 @@
+// Package main starts the UmpleOnline API server.
+// It loads configuration, opens the model and task stores, and keeps a pool of
+// umplesync.jar processes that the HTTP handlers compile against.
 package main
 
 import (

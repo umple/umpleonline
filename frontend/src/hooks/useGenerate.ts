@@ -1,3 +1,8 @@
+/**
+ * Switches the Generate target and runs generation immediately.
+ * Menu commands use this when the user picks a diagram or language, including when dynamic generation is off.
+ */
+
 import { useCallback } from 'react'
 import { useSessionStore } from '../stores/sessionStore'
 import { getGenerateTarget } from '../generation/targets'

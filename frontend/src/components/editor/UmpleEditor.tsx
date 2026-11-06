@@ -1,3 +1,8 @@
+/**
+ * CodeMirror editor for the active Umple tab.
+ * Keeps a view per tab and reports edits to sessionStore. Collaboration rebinds the same editor to the shared Yjs text.
+ */
+
 import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
 import { EditorView, ViewUpdate, scrollPastEnd } from '@codemirror/view'
 import { EditorState, Compartment, Transaction } from '@codemirror/state'

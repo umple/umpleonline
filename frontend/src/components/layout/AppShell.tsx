@@ -1,3 +1,9 @@
+/**
+ * The editor page.
+ * Composes the toolbar, sidebar, Umple editor, diagram, and message pane, and starts
+ * compilation, URL loading, collaboration, and teaching-task routes.
+ */
+
 import { useEffect } from 'react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { AppToolbar } from './AppToolbar'

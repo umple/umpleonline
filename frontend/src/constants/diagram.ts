@@ -1,3 +1,8 @@
+/**
+ * Diagram views, layout algorithms, and the display options the toolbar toggles.
+ * sessionStore and preferencesStore both read this so a view id means the same thing everywhere.
+ */
+
 import { LayoutGrid } from 'lucide-react'
 
 export type DiagramView =

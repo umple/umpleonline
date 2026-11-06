@@ -1,3 +1,8 @@
+/**
+ * Runs Execute, and the manual Regenerate used when dynamic generation is paused.
+ * The top menu bar calls both hooks.
+ */
+
 import { useState, useCallback, useRef } from 'react'
 import { useSessionStore } from '../stores/sessionStore'
 import { useEphemeralStore } from '../stores/ephemeralStore'

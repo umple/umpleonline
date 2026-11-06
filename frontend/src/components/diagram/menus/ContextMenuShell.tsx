@@ -1,3 +1,8 @@
+/**
+ * Shared shell for the diagram context menus.
+ * Positions the menu at the click and closes it. The class, edge, and canvas menus render their items inside it.
+ */
+
 import { useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react'
 
 interface ContextMenuShellProps {

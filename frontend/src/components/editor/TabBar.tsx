@@ -1,3 +1,8 @@
+/**
+ * Tabs for the Umple files in the open model.
+ * Add, close, rename, and switch the active tab. Tab contents live in sessionStore.
+ */
+
 import { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react'
 import { useSessionStore, type Tab } from '../../stores/sessionStore'
 import { usePreferencesStore } from '../../stores/preferencesStore'

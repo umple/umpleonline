@@ -1,3 +1,8 @@
+/**
+ * The top menu bar.
+ * Holds examples, generate, execute, AI, tasks, search, and the links that used to live in the sidebar.
+ */
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useEphemeralStore } from "../../stores/ephemeralStore";
 import { useSessionStore } from "../../stores/sessionStore";

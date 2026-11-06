@@ -1,5 +1,8 @@
 package handlers
 
+// HTTP handler for POST /api/generate.
+// It compiles the open model and returns generated source. The filename is historical; this is the generate route.
+
 import (
 	"encoding/json"
 	"fmt"

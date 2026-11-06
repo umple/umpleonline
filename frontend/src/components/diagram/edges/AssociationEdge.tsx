@@ -1,3 +1,8 @@
+/**
+ * Draws one association on the editable class diagram.
+ * UmpleDiagram registers this as the React Flow edge type. Arrows, diamonds, and labels come from the compiler JSON.
+ */
+
 import { createContext, memo, useContext } from 'react'
 import { BaseEdge, EdgeLabelRenderer, useInternalNode, useStore, type EdgeProps } from '@xyflow/react'
 import type { GvPoint } from '@/api/types'

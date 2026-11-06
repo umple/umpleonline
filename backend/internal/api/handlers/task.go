@@ -1,5 +1,8 @@
 package handlers
 
+// HTTP API for teaching tasks: create and edit a task, open a student response, and submit it.
+// The task sheet and /tasks routes call these handlers. Files live in package task.
+
 import (
 	"encoding/json"
 	"errors"

@@ -1,3 +1,8 @@
+/**
+ * Animated Umple U shown while the AI agent is streaming a reply.
+ * AgentPanel renders it beside the spinner verb. It draws a particle trail around the logo curve.
+ */
+
 import { useRef, useEffect } from 'react'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'

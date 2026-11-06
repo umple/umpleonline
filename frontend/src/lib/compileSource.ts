@@ -1,3 +1,8 @@
+/**
+ * Snapshot of every open tab, which is what generation and diagram requests send.
+ * Collaboration reads the same text from the Yjs document so a remote edit is included.
+ */
+
 import type { ApiTab } from '@/api/types'
 import { getYDoc } from '@/hooks/useCollab'
 import { useCollabStore } from '@/stores/collabStore'

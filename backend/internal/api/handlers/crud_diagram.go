@@ -1,5 +1,8 @@
 package handlers
 
+// POST /api/crud/diagram. Turns a Graphviz DOT graph of object instances into SVG.
+// The object explorer builds the DOT in the browser. This handler only runs dot.
+
 import (
 	"encoding/json"
 	"net/http"

@@ -1,3 +1,8 @@
+/**
+ * Runs a generated program in a short-lived Docker container and returns its output.
+ * app.js calls this for POST /run. The runner image is built locally when it is missing.
+ */
+
 const fs = require('fs');
 const os = require('os');
 const path = require('path');

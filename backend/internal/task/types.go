@@ -1,5 +1,8 @@
 package task
 
+// JSON shapes for a task, a student response, and the requests that create or update them.
+// The store and the HTTP handler both use these types.
+
 import (
 	"errors"
 	"time"

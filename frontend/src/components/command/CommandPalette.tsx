@@ -1,3 +1,8 @@
+/**
+ * Command search opened from the toolbar.
+ * Runs editor commands and loads an example by name. It is the only search box in the app.
+ */
+
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useEphemeralStore } from "../../stores/ephemeralStore";
 import { useSessionStore } from "../../stores/sessionStore";

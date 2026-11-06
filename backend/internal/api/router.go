@@ -1,3 +1,5 @@
+// Package api builds the HTTP router for the UmpleOnline backend.
+// NewRouter mounts every /api route. cmd/server/main.go is the only caller.
 package api
 
 import (

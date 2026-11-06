@@ -1,3 +1,8 @@
+/**
+ * Inline text field for renaming a class or editing an attribute on the canvas.
+ * ClassNode uses it. Committing the value sends a sync action.
+ */
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface EditableFieldProps {

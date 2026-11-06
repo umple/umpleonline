@@ -1,3 +1,8 @@
+/**
+ * Which example category belongs to which diagram view.
+ * Loading an example can switch the canvas to the view that category is meant to show.
+ */
+
 import type { ExampleCategoryId } from '../api/types'
 import type { DiagramView } from './diagram'
 

@@ -1,3 +1,8 @@
+/**
+ * Small prompt the state-diagram adapter opens when an edit needs a typed name.
+ * SmartSvgView renders it. The adapter waits for the value before rewriting Umple.
+ */
+
 import { useEffect, useState } from 'react'
 import {
   Dialog,

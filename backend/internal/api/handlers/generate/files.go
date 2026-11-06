@@ -1,5 +1,8 @@
 package generate
 
+// These helpers collect the source files a generation left on disk, and zip them for download.
+// Service calls these helpers after the Umple compiler finishes.
+
 import (
 	"archive/zip"
 	"fmt"

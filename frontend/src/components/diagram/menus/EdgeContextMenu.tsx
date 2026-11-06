@@ -1,3 +1,8 @@
+/**
+ * Context menu for an association on the class diagram.
+ * Deletes that link through the sync API.
+ */
+
 import { useCallback, useRef } from 'react'
 import { Trash2 } from 'lucide-react'
 import { useSessionStore } from '@/stores/sessionStore'

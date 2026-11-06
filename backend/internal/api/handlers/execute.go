@@ -1,5 +1,8 @@
 package handlers
 
+// POST /api/execute. Compiles the model, then asks code-exec to run a main method.
+// The message pane shows the program output this handler returns.
+
 import (
 	"encoding/json"
 	"fmt"

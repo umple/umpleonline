@@ -1,4 +1,8 @@
-// Spinner verbs for loading messages
+/**
+ * Words shown next to the AI spinner while a reply is streaming.
+ * AgentPanel and AiSpinner pick from this list. The words are decorative.
+ */
+
 export const SPINNER_VERBS = [
   'Accomplishing',
   'Actioning',

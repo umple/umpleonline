@@ -1,3 +1,8 @@
+/**
+ * Watches the agent transcript and stores the latest proposed edit.
+ * UmpleDiffEditor reads that preview from ephemeralStore while a tool call is in progress.
+ */
+
 import { useMemo, useEffect } from 'react'
 import { isToolUIPart, getToolName, type UIMessage } from 'ai'
 import { useEphemeralStore } from '@/stores/ephemeralStore'

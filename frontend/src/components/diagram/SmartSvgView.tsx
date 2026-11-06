@@ -1,3 +1,8 @@
+/**
+ * Renders diagram SVG from the compiler.
+ * State diagrams go through an adapter so a click can edit the Umple text. Other SVG views are display-only.
+ */
+
 import { memo, useRef, useState, useCallback, useMemo, useEffect, useLayoutEffect } from 'react'
 import { ZoomIn, ZoomOut, Maximize } from 'lucide-react'
 import { ControlButton } from './DiagramControls'

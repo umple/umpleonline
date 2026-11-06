@@ -1,3 +1,8 @@
+/**
+ * Controls drawn on top of a diagram.
+ * Layout algorithm, display options, class filters, and mixsets. DiagramPanel mounts this for diagram targets.
+ */
+
 import { useEffect, useMemo, useState } from 'react'
 import { CircleHelp, Eye, ChevronDown, Download, LayoutGrid, ListFilter } from 'lucide-react'
 import { useSessionStore } from '../../stores/sessionStore'

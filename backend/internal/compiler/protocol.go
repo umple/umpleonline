@@ -1,5 +1,8 @@
 package compiler
 
+// sendCommand writes one umplesync command on a TCP connection and reads the ERROR!! frame the jar sends back.
+// Pool.Execute calls it for every request.
+
 import (
 	"errors"
 	"fmt"

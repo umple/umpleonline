@@ -1,3 +1,8 @@
+/**
+ * The Generate menu: each target is a diagram view or a generated language.
+ * The toolbar, the compiler hook, and the right-hand pane look targets up by id.
+ */
+
 import type { DiagramView } from '../stores/sessionStore'
 
 export interface GenerateTarget {

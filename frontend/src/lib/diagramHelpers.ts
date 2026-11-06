@@ -1,3 +1,8 @@
+/**
+ * Small helpers for the editable class diagram.
+ * Turns a React Flow node id into a class name, and decides which sync action deletes an edge.
+ */
+
 import type { Edge } from '@xyflow/react'
 import type { AssociationEdgeData } from '@/components/diagram/edges/AssociationEdge'
 

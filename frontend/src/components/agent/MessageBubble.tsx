@@ -1,3 +1,8 @@
+/**
+ * One message in the Umple AI transcript.
+ * Renders markdown for the assistant and the diff for a tool call that edits Umple.
+ */
+
 import { memo, useCallback, useMemo } from 'react'
 import { getToolName, isToolUIPart, type UIMessage } from 'ai'
 import {

@@ -1,4 +1,7 @@
-// Types matching the Go backend API responses
+/**
+ * TypeScript shapes for the JSON the Go API returns.
+ * The fetch client and the stores share these types so a response field has one definition.
+ */
 
 export interface GenerationRequest {
   code: string;

@@ -1,3 +1,8 @@
+/**
+ * The left pane: tab bar, Umple editor, and the AI panel when it is open.
+ * AppShell lays this next to DiagramPanel.
+ */
+
 import { useCallback, useRef, useEffect, lazy, Suspense } from 'react'
 import { EditorSelection } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'

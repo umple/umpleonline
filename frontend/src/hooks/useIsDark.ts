@@ -1,3 +1,8 @@
+/**
+ * Whether the page is currently in dark mode.
+ * Diagram requests send this so the compiler can pick colors that match the theme.
+ */
+
 import { useEffect, useState } from 'react'
 import { usePreferencesStore } from '../stores/preferencesStore'
 

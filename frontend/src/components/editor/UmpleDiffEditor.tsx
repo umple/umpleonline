@@ -1,3 +1,8 @@
+/**
+ * Read-only diff of the AI agent's proposed Umple against the current buffer.
+ * Shown while a tool call's preview is active.
+ */
+
 import { useEffect, useRef } from 'react'
 import { basicSetup } from 'codemirror'
 import { ChangeSet, Compartment, EditorState } from '@codemirror/state'

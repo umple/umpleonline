@@ -1,3 +1,8 @@
+/**
+ * Read-only highlighted view of one generated source file.
+ * GeneratedOutputView renders a CodeOutput per file tab.
+ */
+
 import { useEffect, useRef } from 'react'
 import { EditorView } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'

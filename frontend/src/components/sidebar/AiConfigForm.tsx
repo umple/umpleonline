@@ -1,3 +1,8 @@
+/**
+ * Form for the AI provider, API key, and model.
+ * The sidebar and the toolbar popover both render it. The choice is stored in preferencesStore.
+ */
+
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { usePreferencesStore, type AiProvider } from '@/stores/preferencesStore'
 import { fetchModels, type ModelInfo } from '@/ai/models'

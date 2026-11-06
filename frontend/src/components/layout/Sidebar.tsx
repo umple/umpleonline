@@ -1,3 +1,8 @@
+/**
+ * Preferences sidebar.
+ * Dynamic generation and theme live here. It stays closed until the toolbar opens it.
+ */
+
 import {
   Sheet,
   SheetContent,

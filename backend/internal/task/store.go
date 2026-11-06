@@ -1,4 +1,9 @@
+// Package task stores teaching-task definitions and student responses on disk.
+// The task HTTP handler is the only caller.
 package task
+
+// The store creates a task, copies its starter Umple into a response directory, and records a submission.
+// Task names are checked so an id cannot escape the task directory.
 
 import (
 	"crypto/rand"

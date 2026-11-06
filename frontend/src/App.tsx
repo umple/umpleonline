@@ -1,3 +1,8 @@
+/**
+ * Root React layout.
+ * Applies the saved theme, sets the document title, and renders the active route plus toasts.
+ */
+
 import { useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import { usePreferencesStore } from './stores/preferencesStore'

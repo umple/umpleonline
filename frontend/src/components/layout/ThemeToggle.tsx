@@ -1,3 +1,8 @@
+/**
+ * Light, dark, and system theme control.
+ * Writes the choice to preferencesStore. App.tsx applies it on the document.
+ */
+
 import { Moon, Sun, Monitor } from 'lucide-react'
 import { usePreferencesStore } from '../../stores/preferencesStore'
 import {

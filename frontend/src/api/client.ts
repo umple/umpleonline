@@ -1,3 +1,8 @@
+/**
+ * Browser client for the Go API under /api.
+ * Hooks and components call api.* instead of fetch. Task routes have their own client in taskApi.ts.
+ */
+
 import type {
   GenerationRequest,
   GenerationResponse,

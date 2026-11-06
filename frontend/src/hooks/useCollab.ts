@@ -1,3 +1,8 @@
+/**
+ * Opens the collaboration WebSocket while a room is active, and closes it when the user leaves.
+ * AppShell calls this once. The Yjs document it creates is what the editor and tab list sync through.
+ */
+
 import { useEffect, useRef } from 'react'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'

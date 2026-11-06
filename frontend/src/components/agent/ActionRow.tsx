@@ -1,3 +1,8 @@
+/**
+ * One tool-call row in the AI transcript: running, done, failed, or waiting for approval.
+ * MessageBubble renders an ActionRow for each tool the agent invokes.
+ */
+
 import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { ChevronRight, Loader2, Check, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'

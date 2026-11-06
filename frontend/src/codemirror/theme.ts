@@ -1,3 +1,8 @@
+/**
+ * Light and dark syntax colors for the Umple editor.
+ * These are the exception to the semantic color tokens: CodeMirror highlights use their own palette.
+ */
+
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
 import { Extension } from '@codemirror/state'

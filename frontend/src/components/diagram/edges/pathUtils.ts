@@ -1,3 +1,8 @@
+/**
+ * Turns a list of Graphviz points into the SVG path an association follows.
+ * AssociationEdge uses this when the compiler returned an explicit route.
+ */
+
 import type { GvPoint } from '@/api/types'
 
 export function buildPathFromPoints(points: GvPoint[]) {

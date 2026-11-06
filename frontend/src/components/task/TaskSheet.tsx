@@ -1,3 +1,8 @@
+/**
+ * Sheet for teaching tasks.
+ * Creates a task definition and, on a /tasks link, shows the loaded response so it can be submitted.
+ */
+
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import {

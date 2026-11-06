@@ -1,3 +1,8 @@
+/**
+ * The teaching task and response loaded from the URL, and whether the task sheet is open.
+ * useTaskRoute fills this in. TaskSheet and the sidebar section render it.
+ */
+
 import { create } from 'zustand'
 import type { TaskView, ResponseView } from '../api/types'
 

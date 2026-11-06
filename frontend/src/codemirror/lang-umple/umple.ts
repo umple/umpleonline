@@ -1,3 +1,8 @@
+/**
+ * CodeMirror language definition for Umple.
+ * Wraps the generated Lezer parser with syntax highlighting tags. createEditorExtensions enables it on every editor.
+ */
+
 import { parser } from "./parser.js"
 import { LRLanguage, indentNodeProp, continuedIndent, foldNodeProp, foldInside, LanguageSupport } from "@codemirror/language"
 import { styleTags, tags as t } from "@lezer/highlight"

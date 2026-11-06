@@ -1,3 +1,8 @@
+/**
+ * Drag handle that resizes the AI panel.
+ * AgentPanel uses this so the transcript can grow without covering the whole editor.
+ */
+
 import { useRef, useCallback, useState } from 'react'
 
 interface UseResizablePanelOptions {

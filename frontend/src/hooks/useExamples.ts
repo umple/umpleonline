@@ -1,3 +1,8 @@
+/**
+ * Loads an example's Umple into the editor and remembers which example set is selected.
+ * The toolbar example menus and the command palette both call this.
+ */
+
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSessionStore } from "../stores/sessionStore";
 import { useCollabStore } from "../stores/collabStore";

@@ -1,3 +1,8 @@
+/**
+ * Reads the prefers-reduced-motion setting.
+ * The onboarding tour, the AI panel's scroll, and the AI spinner use it to drop animation.
+ */
+
 import { useState, useEffect } from 'react'
 
 const QUERY = '(prefers-reduced-motion: reduce)'

@@ -1,3 +1,8 @@
+/**
+ * Context menu for a class node.
+ * Rename, add an attribute or method, or delete the class. Edits go through the sync API.
+ */
+
 import { useCallback, useRef } from 'react'
 import { Type, ListPlus, Braces, Trash2 } from 'lucide-react'
 import { useSessionStore } from '@/stores/sessionStore'

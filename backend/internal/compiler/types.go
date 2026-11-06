@@ -1,5 +1,8 @@
 package compiler
 
+// CompileRequest is the command a handler sends the pool. CompileResult is the
+// jar output that comes back, including text pulled out of the ERROR!! frame.
+
 // CompileRequest is sent from API handlers to the compiler pool.
 type CompileRequest struct {
 	// Command is the raw command line to send to umplesync.jar via TCP.

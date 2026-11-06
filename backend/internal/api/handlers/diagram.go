@@ -1,5 +1,8 @@
 package handlers
 
+// POST /api/diagram asks umplesync for a diagram and returns SVG plus Graphviz layout.
+// The class canvas uses the layout to place nodes. Other views display the SVG or HTML as-is.
+
 import (
 	_ "embed"
 	"encoding/json"

@@ -1,5 +1,8 @@
 package handlers
 
+// POST /api/crud/schema. Compiles the model and returns the object-explorer schema.
+// The schema itself is built by package crud from the compiler's model.json.
+
 import (
 	"encoding/json"
 	"fmt"

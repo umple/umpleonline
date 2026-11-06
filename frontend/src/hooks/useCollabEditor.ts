@@ -1,3 +1,8 @@
+/**
+ * The shared Yjs text for the active tab, or null when this session is not collaborating.
+ * UmpleEditor rebinds CodeMirror to that text when the tab changes.
+ */
+
 import { useMemo } from 'react'
 import type * as Y from 'yjs'
 import type { Awareness } from 'y-protocols/awareness'

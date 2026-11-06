@@ -1,3 +1,8 @@
+/**
+ * Fetches OpenRouter's model list for the AI settings form.
+ * models.ts calls this when the selected provider is OpenRouter. The request goes through the backend proxy.
+ */
+
 import type { ModelInfo } from '../models'
 
 interface OpenRouterModel {

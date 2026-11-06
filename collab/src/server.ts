@@ -1,3 +1,8 @@
+/**
+ * WebSocket server for live collaboration, one room per model.
+ * Browsers connect to /ws/collab/:room. /health and /status are plain HTTP for the diagnostics page.
+ */
+
 import http from 'node:http'
 import { WebSocketServer } from 'ws'
 import { getCollabStats, setupWSConnection } from './sync.js'

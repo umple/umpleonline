@@ -1,3 +1,8 @@
+/**
+ * The Umple AI chat panel over the editor.
+ * Hosts the transcript and the input bar. useAgent runs the model; this component is the UI.
+ */
+
 import {
   memo,
   useRef,
