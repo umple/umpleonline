@@ -88,6 +88,51 @@ function lineRangeAt(code: string, index: number): TextRange {
   return { from, to: to === -1 ? code.length : to }
 }
 
+// Preserve offsets while hiding braces and declarations in comments and strings.
+function maskNonCode(code: string): string {
+  return code.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g,
+    (text) => text.replace(/[^\r\n]/g, ' '))
+}
+
+function findClassEdgeRange(code: string, name: string): TextRange | null {
+  code = maskNonCode(code)
+  const endpoints = name.split(/->|--/).map(normalizeDiagramLookupToken)
+  if (endpoints.length !== 2) return null
+  const [source, target] = endpoints
+  if (!source || !target) return null
+
+  for (const [owner, other] of [[source, target], [target, source]]) {
+    const definition = new RegExp(`\\b(?:class|interface|associationClass)\\s+${escapeForRegex(owner)}\\s*\\{`, 'g')
+    let match: RegExpExecArray | null
+    while ((match = definition.exec(code))) {
+      const block = blockRangeFrom(code, match.index)
+      if (!block) continue
+      const bodyStart = code.indexOf('{', match.index) + 1
+      // Only inspect statements directly in the class, excluding method/state bodies.
+      let start = bodyStart
+      let depth = 0
+      for (let i = bodyStart; i < block.to - 1; i++) {
+        if (code[i] === '{') depth++
+        if (code[i] === '}') {
+          depth--
+          if (depth === 0) start = i + 1
+        }
+        if (code[i] !== ';' || depth !== 0) continue
+        const statement = code.slice(start, i + 1)
+        const mentionsOther = new RegExp(`\\b${escapeForRegex(other)}\\b`).test(statement)
+        if (mentionsOther && (/^\s*[\d*][^;]*(?:--|->|<-|<@>)/.test(statement)
+          || /^\s*isA\s+/.test(statement))) {
+          const first = start + statement.search(/\S/)
+          const lineStart = code.lastIndexOf('\n', first - 1) + 1
+          return { from: code.slice(lineStart, first).trim() ? first : lineStart, to: i + 1 }
+        }
+        start = i + 1
+      }
+    }
+  }
+  return null
+}
+
 function blockRangeFrom(code: string, from: number): TextRange | null {
   const braceIndex = code.indexOf('{', from)
   if (braceIndex === -1) return null
@@ -113,6 +158,7 @@ function rangeFromPattern(code: string, pattern: RegExp): TextRange | null {
 }
 
 function findDefinitionRange(code: string, name: string): TextRange | null {
+  code = maskNonCode(code)
   const escaped = escapeForRegex(name)
   const keywordBlock = rangeFromPattern(
     code,
@@ -379,6 +425,8 @@ export function findDiagramRange(code: string, detail: DiagramSelectDetail): Tex
   if (detail.kind === 'edge') {
     const stateEdgeRange = findStateEdgeRange(code, detail)
     if (stateEdgeRange) return stateEdgeRange
+    const classEdgeRange = findClassEdgeRange(code, detail.name)
+    if (classEdgeRange) return classEdgeRange
   }
 
   for (const candidate of getLookupCandidates(detail.name, detail.kind)) {
