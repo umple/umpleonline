@@ -167,3 +167,60 @@ class Lock {
 }`)
   })
 })
+
+
+describe('class diagram selection (issue #2257)', () => {
+  function selected(code: string, name: string, kind: 'node' | 'edge') {
+    const range = findDiagramRange(code, { name, kind })
+    expect(range).not.toBeNull()
+    return code.slice(range!.from, range!.to)
+  }
+
+  it.each(['1--*Y;', '1--* Y;', '1 -- * Y;', '1->*Y;', '* Y -- 1;'])(
+    'selects only the association statement: %s', (association) => {
+      const code = `class X {
+  ${association}
+  String following;
+}
+class Y {}`
+      expect(selected(code, 'X->Y', 'edge')).toBe(`  ${association}`)
+      expect(selected(code, 'Y->X', 'edge')).toBe(`  ${association}`)
+    },
+  )
+
+  it.each(['', '\n', '\n\n'])('selects a class with trailing text %j', (suffix) => {
+    const definition = 'class X {\n  String value;\n}'
+    expect(selected(definition + suffix, 'X', 'node')).toBe(definition)
+  })
+
+  it('ignores declarations and unmatched braces inside comments and strings', () => {
+    const definition = `class X {
+  // }
+  String value = "{";
+  /* } */
+}`
+    const code = `// class X {}
+${definition}
+class Y {}`
+    expect(selected(code, 'X', 'node')).toBe(definition)
+  })
+
+  it('scopes associations to their owner and skips comments and method bodies', () => {
+    const code = `class Other { 1--*Y; }
+class X {
+  // 1--*Y;
+  void method() { String fake = "1--*Y;"; }
+  1--*Y;
+}
+class Y {}`
+    expect(selected(code, 'X->Y', 'edge')).toBe('  1--*Y;')
+  })
+
+  it('selects an inline association without including adjacent declarations', () => {
+    expect(selected('class X { 1--*Y; String next; } class Y {}', 'X->Y', 'edge')).toBe('1--*Y;')
+  })
+
+  it('selects an inheritance statement', () => {
+    expect(selected('class X {\n  isA Y;\n}\nclass Y {}', 'X->Y', 'edge')).toBe('  isA Y;')
+  })
+})
