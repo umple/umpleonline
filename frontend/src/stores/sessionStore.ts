@@ -87,6 +87,7 @@ interface SessionState {
   classFilterQuery: string;
   activeNamedFilters: string[];
   activeMixsets: string[];
+  historyId: string;
   /** Set by setCodeFromSync so useCompiler can skip the debounce */
   syncPending: boolean;
   /** Bumped on tab rename/reorder to trigger a compile that persists tabs.json */
@@ -113,6 +114,7 @@ interface SessionState {
   undo: () => void;
   redo: () => void;
   setModelId: (id: string) => void;
+  startNewHistory: () => void;
   markSaved: (id?: string) => void;
   addTab: (tab: Omit<Tab, "dirty" | "savedCode">) => void;
   addNewTab: () => void;
@@ -200,6 +202,7 @@ export const useSessionStore = create<SessionState>()(
       // ── Editor state ──
       code: DEFAULT_CODE,
       modelId: null,
+      historyId: crypto.randomUUID(),
       tabs: [
         {
           id: "main",
@@ -313,6 +316,9 @@ export const useSessionStore = create<SessionState>()(
         }),
 
       setModelId: (modelId) => set({ modelId }),
+
+      startNewHistory: () =>
+        set({ historyId: crypto.randomUUID() }),
 
       markSaved: (id) =>
         set((s) => {
@@ -568,6 +574,7 @@ export const useSessionStore = create<SessionState>()(
       loadExample: (id, name, code, modelId, setId) => {
         set((s) => ({
           code,
+          historyId: crypto.randomUUID(),
           selectedExample: name,
           selectedExampleId: id,
           selectedExampleSetId: setId ?? null,
@@ -607,6 +614,7 @@ export const useSessionStore = create<SessionState>()(
       loadBlankModel: (setId) => {
         set((s) => ({
           code: "",
+          historyId: crypto.randomUUID(),
           selectedExample: null,
           selectedExampleId: "blank",
           selectedExampleSetId: setId ?? null,
@@ -885,6 +893,7 @@ export const useSessionStore = create<SessionState>()(
       },
       partialize: (state) => ({
         modelId: state.modelId,
+        historyId: state.historyId,
         selectedExample: state.selectedExample,
         selectedExampleId: state.selectedExampleId,
         selectedExampleSetId: state.selectedExampleSetId,
