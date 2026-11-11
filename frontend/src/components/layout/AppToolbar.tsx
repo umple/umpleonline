@@ -48,6 +48,8 @@ import {
 import { Tip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useEffectiveDynamicGeneration } from "@/lib/effectiveDynamicGeneration";
+import { History } from 'lucide-react'
+import { VersionHistoryDialog } from '../history/VersionHistoryDialog'
 
 const shellBtn =
   "inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink";
@@ -96,6 +98,7 @@ export function AppToolbar() {
   const selectedExampleId = useSessionStore((s) => s.selectedExampleId);
   const selectedExampleSetId = useSessionStore((s) => s.selectedExampleSetId);
   const generationErrorSourceSignature = useEphemeralStore((s) => s.generationErrorSourceSignature);
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
   const handleGenerate = useSelectGenerateTarget();
   const {
     sets: exampleSets,
@@ -638,8 +641,32 @@ export function AppToolbar() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      </div>
+        <DropdownMenu>
+         <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+            shellBtn,
+            'border border-border/70 bg-surface-0 shadow-sm',
+          )}
+          aria-label="Save and Load"
+        >
+      Save & Load
+      <ChevronDown className="size-3 shrink-0" />
+    </button>
+  </DropdownMenuTrigger>
+
+  <DropdownMenuContent align="start">
+    <DropdownMenuItem
+      onSelect={() => setVersionHistoryOpen(true)}
+    >
+      <History className="size-3.5" />
+      Restore Earlier Version
+    </DropdownMenuItem>
+  </DropdownMenuContent>
+</DropdownMenu>
+  </div>
+ </div>
 
       <div className="flex items-center gap-1 shrink-0">
         <TopLinkIconButton
@@ -700,6 +727,12 @@ export function AppToolbar() {
           <div className="h-full w-1/4 bg-brand animate-progress-indeterminate" />
         </div>
       )}
+
+      {/* Issue #145 — Model Version History Dialog */}
+      <VersionHistoryDialog
+        open={versionHistoryOpen}
+        onOpenChange={setVersionHistoryOpen}
+      />
     </div>
   );
 }
