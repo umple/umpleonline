@@ -12,6 +12,7 @@ import { useCompiler } from '../../hooks/useCompiler'
 import { useModelFromURL } from '../../hooks/useModelFromURL'
 import { useCollab } from '../../hooks/useCollab'
 import { useTaskRoute } from '../../hooks/useTaskRoute'
+import { useVersionHistory } from '../../hooks/useVersionHistory'
 import { WelcomeDialog } from '@/components/onboarding/WelcomeDialog'
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
@@ -29,6 +30,7 @@ export function AppShell() {
   useModelFromURL()
   useCollab()
   useTaskRoute()
+  useVersionHistory()
 
   useEffect(() => {
     if (sessionStorage.getItem(SESSION_COUNTER_KEY)) return

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useSessionStore } from "../stores/sessionStore";
 import { useCollabStore } from "../stores/collabStore";
 import { useEphemeralStore } from "../stores/ephemeralStore";
+import { getOrCreateHistoryId } from '../stores/versionHistoryStore'
 import { isTemporaryModel } from "../lib/modelId";
 import { getViewForLegacyDiagramType } from "../constants/diagram";
 import { getDefaultViewForExampleCategory } from "../constants/examples";
@@ -149,6 +150,24 @@ export function useModelFromURL() {
       .getModel(initialModelId, abort.signal)
       .then((res) => {
         if (abort.signal.aborted) return;
+
+        // Start a separate local history before replacing the current model.
+        // The history subscriber can then save the outgoing model.
+        // Reuse the existing history when reloading the same model.
+        const currentState = useSessionStore.getState()
+
+        const nextHistoryId = isTemporaryModel(res.modelId)
+          ? currentState.modelId === res.modelId
+            ? currentState.historyId
+            : crypto.randomUUID()
+          : getOrCreateHistoryId(res.modelId)
+
+        if (currentState.historyId !== nextHistoryId) {
+          useSessionStore.setState({
+            historyId: nextHistoryId,
+          })
+        }
+
         if (res.tabs?.length) {
           restoreTabs(res.tabs, res.activeTabId ?? res.tabs[0].id);
         } else {
