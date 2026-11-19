@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { History, Trash2, RotateCcw } from 'lucide-react'
 import { useSessionStore } from '../../stores/sessionStore'
+import { useCollabStore } from '../../stores/collabStore'
 import {
   getModelSnapshots,
   getAllModelSnapshots,
@@ -26,6 +27,7 @@ export function VersionHistoryDialog({
   onOpenChange,
 }: VersionHistoryDialogProps) {
   const modelId = useSessionStore((s) => s.historyId)
+  const isCollaborating = useCollabStore((s) => s.isCollaborating)
   const [revision, setRevision] = useState(0)
   const [showPreviousSessions, setShowPreviousSessions] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -50,6 +52,15 @@ export function VersionHistoryDialog({
 
 
 const handleRestore = () => {
+  // Prevent restoring local snapshots during collaborative editing.
+  if (useCollabStore.getState().isCollaborating) {
+    setError(
+      'Restoring versions is unavailable during a shared session. ' +
+      'Please leave the shared session before restoring.'
+    )
+    return
+  }
+
     if (!selected || !modelId) return
     if (!showPreviousSessions && selected.modelId !== modelId) return
     if (
@@ -88,7 +99,15 @@ const state = useSessionStore.getState()
     }
     // Restore all tabs from the selected snapshot.
     state.restoreTabs(selected.tabs, selected.activeTabId)
-
+    window.dispatchEvent(
+      new CustomEvent('umple-version-restored', {
+        detail: {
+          modelId: selected.modelId,
+          snapshotId: selected.id,
+          tabs: selected.tabs,
+        },
+      }),
+    )
     setSelectedId(null)
     setError(null)
     setRevision((value) => value + 1)
@@ -194,11 +213,23 @@ const state = useSessionStore.getState()
             <button
               type="button"
               onClick={handleRestore}
-              className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm text-white"
+              disabled={isCollaborating}
+              title={
+                isCollaborating
+                  ? 'Leave the shared session before restoring a version.'
+                  : undefined
+              }
+              className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RotateCcw className="size-4" />
               Restore this version
             </button>
+            {isCollaborating && (
+              <p className="text-sm text-amber-600" role="status">
+                Version restoration is disabled during shared sessions.
+                Leave the shared session to restore an earlier version.
+              </p>
+            )}
           </div>
         )}
       </DialogContent>

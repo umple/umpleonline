@@ -2,7 +2,7 @@
 import { useEffect } from 'react'
 import { toast } from 'sonner'
 import { useSessionStore } from '../stores/sessionStore'
-import { saveModelSnapshot, getModelSnapshots } from '../stores/versionHistoryStore'
+import { saveModelSnapshot, getModelSnapshots, isSnapshotDescendant } from '../stores/versionHistoryStore'
 import { urlModelResolved } from './useModelFromURL'
 
 const BACKUP_INTERVAL_MS = 2 * 60 * 1000
@@ -11,7 +11,45 @@ const BACKUP_DEBOUNCE_MS = 5 * 1000
 export function useVersionHistory() {
   useEffect(() => {
     const lastSavedCode = new Map<string, string>()
+    // Track the revision this editor is currently based on.
+    const baseRevision = new Map<string, string | null>()
 
+    const getBaseRevision = (historyId: string): string | null => {
+      if (!baseRevision.has(historyId)) {
+      const snapshots = getModelSnapshots(historyId)
+
+    // Only adopt a saved revision when its content matches
+    // the model currently loaded in this editor.
+    const state = useSessionStore.getState()
+    const currentTabs = state.tabs.map((tab) => ({
+      id: tab.id,
+      name: tab.name,
+      code: tab.code,
+    }))
+
+    const matching = snapshots.find(
+      (snapshot) =>
+        JSON.stringify(snapshot.tabs) === JSON.stringify(currentTabs) &&
+        snapshot.activeTabId === state.activeTabId
+    )
+
+    baseRevision.set(historyId, matching?.id ?? null)
+  }
+
+  return baseRevision.get(historyId) ?? null
+}
+const handleVersionRestored = (event: Event) => {
+  const { modelId, snapshotId, tabs } = (
+    event as CustomEvent<{
+      modelId: string
+      snapshotId: string
+      tabs: { id: string; name: string; code: string }[]
+    }>
+  ).detail
+
+  baseRevision.set(modelId, snapshotId)
+  lastSavedCode.set(modelId, JSON.stringify(tabs))
+}
     const saveCurrentVersion = () => {
         // Do not back up the temporary workspace while a URL model is loading.
       if (!urlModelResolved) return
@@ -29,15 +67,19 @@ export function useVersionHistory() {
 
       if (lastSavedCode.get(state.historyId) === signature) return
 
+      const parentSnapshotId = getBaseRevision(state.historyId)
+
       const saved = saveModelSnapshot({
         modelId: state.historyId,
         tabs,
         activeTabId: state.activeTabId,
         reason: 'automatic',
+        parentSnapshotId,
       })
 
       if (saved) {
         lastSavedCode.set(state.historyId, signature)
+        baseRevision.set(state.historyId, saved.id)
       }
     }
 
@@ -63,18 +105,28 @@ export function useVersionHistory() {
       state.modelId === null &&
       previousState.modelId !== null
     if (!isCrossSessionRecovery && previousState.historyId && previousState.tabs.length > 0) {
+      const outgoingTabs = previousState.tabs.map((tab) => ({
+        id: tab.id,
+        name: tab.name,
+        code: tab.code,
+      }))
+
+      const latestSnapshot = getModelSnapshots(previousState.historyId)[0]
+
+      const isAlreadyBackedUp =
+        latestSnapshot &&
+        JSON.stringify(latestSnapshot.tabs) === JSON.stringify(outgoingTabs) &&
+        latestSnapshot.activeTabId === previousState.activeTabId
+
+      if (!isAlreadyBackedUp) {
       saveModelSnapshot({
         modelId: previousState.historyId,
-        tabs: previousState.tabs.map((tab) => ({
-          id: tab.id,
-          name: tab.name,
-          code: tab.code,
-        })),
+        tabs: outgoingTabs,
         activeTabId: previousState.activeTabId,
         reason: 'before-switch',
       })
     }
-
+  }
     // Schedule a backup for the new model.
     debounceTimer = window.setTimeout(() => {
       saveCurrentVersion()
@@ -116,6 +168,60 @@ export function useVersionHistory() {
 
       if (!latest) return
 
+      const currentRevisionId = getBaseRevision(state.historyId)
+
+      if (latest.id === currentRevisionId) return
+
+      if (!currentRevisionId) {
+        toast.warning(
+          'The latest model version has unknown ancestry. Review Version History before restoring.',
+          {
+            id: `version-history-${state.historyId}`,
+            duration: Infinity,
+          },
+        )
+        return
+      }
+
+      const currentRevision = snapshots.find(
+        (snapshot) => snapshot.id === currentRevisionId,
+      )
+
+      const latestIsDescendant = isSnapshotDescendant(
+        snapshots,
+        latest.id,
+        currentRevisionId,
+      )
+
+      if (!latestIsDescendant) {
+        const latestHasKnownParent =
+          latest.parentSnapshotId != null &&
+          snapshots.some(
+            (snapshot) => snapshot.id === latest.parentSnapshotId,
+          )
+
+        const currentHasKnownParent =
+          currentRevision?.parentSnapshotId != null &&
+          snapshots.some(
+            (snapshot) => snapshot.id === currentRevision.parentSnapshotId,
+          )
+
+        const hasKnownCommonParent =
+          latestHasKnownParent &&
+          currentHasKnownParent &&
+          latest.parentSnapshotId === currentRevision?.parentSnapshotId
+
+        toast.warning(
+          hasKnownCommonParent
+            ? 'Conflicting model changes detected. Review Version History before restoring.'
+            : 'The latest model version has unknown ancestry. Review Version History before restoring.',
+          {
+            id: `version-history-${state.historyId}`,
+            duration: Infinity,
+          },
+        )
+        return
+      }
       const currentTabs = state.tabs.map((tab) => ({
         id: tab.id,
         name: tab.name,
@@ -129,6 +235,10 @@ export function useVersionHistory() {
         return
       }
 
+      const notifiedTabs = JSON.stringify(currentTabs)
+      const notifiedActiveTabId = state.activeTabId
+      const notifiedRevisionId = baseRevision.get(state.historyId)
+
       toast.info('A newer model version is available.', {
         id: `version-history-${state.historyId}`,
         description: 'Another browser tab saved changes to this model.',
@@ -137,6 +247,24 @@ export function useVersionHistory() {
           label: 'Update to latest',
           onClick: () => {
             const current = useSessionStore.getState()
+            const currentTabsJson = JSON.stringify(
+              current.tabs.map(({ id, name, code }) => ({
+                id,
+                name,
+                code,
+              })),
+            )
+
+            if (
+              currentTabsJson !== notifiedTabs ||
+              current.activeTabId !== notifiedActiveTabId ||
+              baseRevision.get(current.historyId) !== notifiedRevisionId
+            ) {
+              toast.warning(
+                'Your model changed after this notification. Review Version History before updating.',
+              )
+              return
+            }
 
             // Never apply a snapshot belonging to another model.
             if (current.historyId !== latest.modelId) {
@@ -180,6 +308,15 @@ export function useVersionHistory() {
 
             current.restoreTabs(newest.tabs, newest.activeTabId)
 
+            // The editor is now based on the restored revision.
+            baseRevision.set(current.historyId, newest.id)
+
+            // Prevent an unnecessary automatic backup of unchanged restored content.
+            lastSavedCode.set(
+              current.historyId,
+              JSON.stringify(newest.tabs),
+            )
+
             toast.success('Updated to the latest saved model version.')
           },
         },
@@ -193,12 +330,20 @@ export function useVersionHistory() {
     }
 
     window.addEventListener('storage', handleStorageChange)
+    window.addEventListener(
+      'umple-version-restored',
+      handleVersionRestored,
+    )
     // Capture an already-loaded model when the hook starts.
     saveCurrentVersion()
 
     return () => {
       unsubscribe()
       window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener(
+        'umple-version-restored',
+        handleVersionRestored,
+      )
       window.clearInterval(timer)
 
       if (debounceTimer !== undefined) {

@@ -22,6 +22,7 @@ const startupState = vi.hoisted(() => ({
     info: vi.fn(),
     error: vi.fn(),
     success: vi.fn(),
+    warning: vi.fn(),
   }))
 
   vi.mock('sonner', () => ({
@@ -123,7 +124,27 @@ describe('useVersionHistory integration', () => {
       ),
     ).toBe(false)
   })
+  it('does not duplicate an already backed-up model when switching', () => {
+    render(<HistoryTestComponent />)
 
+    // The initial model is backed up when the hook mounts.
+    expect(getModelSnapshots('history-a')).toHaveLength(1)
+
+    act(() => {
+      useSessionStore.setState({
+        historyId: 'history-b',
+        modelId: 'model-b',
+        code: 'class ModelB {}',
+        tabs: [createTab('class ModelB {}')],
+        activeTabId: 'main',
+      })
+    })
+
+    const snapshots = getModelSnapshots('history-a')
+
+    expect(snapshots).toHaveLength(1)
+    expect(snapshots[0].tabs[0].code).toBe('class ModelA {}')
+  })
   it('does not create duplicate snapshots for unchanged code', () => {
     render(<HistoryTestComponent />)
 
@@ -175,8 +196,411 @@ describe('useVersionHistory integration', () => {
     expect(snapshots).toHaveLength(1)
     expect(snapshots[0].tabs[0].code).toBe('class LoadedModel {}')
   })
+
+  it('does not offer an older snapshot as a newer version', () => {
+    render(<HistoryTestComponent />)
+
+    // The hook saves the original model on mount.
+    const original = getModelSnapshots('history-a')[0]
+    expect(original).toBeDefined()
+
+    // The current tab makes a newer edit.
+    act(() => {
+      useSessionStore.getState().setCode('class ModelA { latest; }')
+      vi.advanceTimersByTime(5000)
+    })
+
+    expect(getModelSnapshots('history-a')[0].tabs[0].code)
+      .toBe('class ModelA { latest; }')
+
+    // Simulate another tab writing older model content later.
+    saveModelSnapshot({
+      modelId: 'history-a',
+      tabs: [{
+        id: 'main',
+        name: 'Model.ump',
+        code: original.tabs[0].code,
+      }],
+      activeTabId: 'main',
+      reason: 'automatic',
+    })
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'umple-version-history-v1',
+        }),
+      )
+    })
+
+    expect(toastMocks.info).not.toHaveBeenCalledWith(
+      'A newer model version is available.',
+      expect.anything(),
+    )
+    expect(toastMocks.warning).toHaveBeenCalledWith(
+      'The latest model version has unknown ancestry. Review Version History before restoring.',
+      expect.anything(),
+    )
+  })
+  it('links consecutive automatic backups to their parent revision', () => {
+    render(<HistoryTestComponent />)
+
+    const original = getModelSnapshots('history-a')[0]
+    expect(original).toBeDefined()
+
+    act(() => {
+      useSessionStore.getState().setCode('class ModelA { first; }')
+      vi.advanceTimersByTime(5000)
+    })
+
+    const first = getModelSnapshots('history-a')[0]
+
+    expect(first.parentSnapshotId).toBe(original.id)
+
+    act(() => {
+      useSessionStore.getState().setCode('class ModelA { second; }')
+      vi.advanceTimersByTime(5000)
+    })
+
+    const second = getModelSnapshots('history-a')[0]
+
+    expect(second.parentSnapshotId).toBe(first.id)
+    expect(second.tabs[0].code).toBe('class ModelA { second; }')
+  })
+  it('warns about conflicting branches without replacing local changes', () => {
+    render(<HistoryTestComponent />)
+
+    const original = getModelSnapshots('history-a')[0]
+    expect(original).toBeDefined()
+
+    // Browser tab A makes a local edit.
+    act(() => {
+      useSessionStore.getState().setCode('class LocalChange {}')
+      vi.advanceTimersByTime(5000)
+    })
+
+    const localRevision = getModelSnapshots('history-a')[0]
+    expect(localRevision.parentSnapshotId).toBe(original.id)
+
+    // Browser tab B independently edits the original version.
+    const remoteRevision = saveModelSnapshot({
+      modelId: 'history-a',
+      tabs: [{
+        id: 'main',
+        name: 'Model.ump',
+        code: 'class RemoteChange {}',
+      }],
+      activeTabId: 'main',
+      reason: 'manual',
+      parentSnapshotId: original.id,
+    })
+
+    expect(remoteRevision).not.toBeNull()
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'umple-version-history-v1',
+        }),
+      )
+    })
+
+    expect(toastMocks.warning).toHaveBeenCalledWith(
+      'Conflicting model changes detected. Review Version History before restoring.',
+      expect.objectContaining({
+        id: 'version-history-history-a',
+      }),
+    )
+
+    expect(toastMocks.info).not.toHaveBeenCalledWith(
+      'A newer model version is available.',
+      expect.anything(),
+    )
+
+    expect(useSessionStore.getState().tabs[0].code)
+      .toBe('class LocalChange {}')
+
+    // Both independent revisions must remain recoverable.
+    const snapshots = getModelSnapshots('history-a')
+
+    expect(snapshots.some(snapshot => snapshot.id === localRevision.id))
+      .toBe(true)
+
+    expect(snapshots.some(snapshot => snapshot.id === remoteRevision!.id))
+      .toBe(true)
+  })
+  it('does not apply a stale update notification after local edits', () => {
+    render(<HistoryTestComponent />)
+
+    const original = getModelSnapshots('history-a')[0]
+    expect(original).toBeDefined()
+
+    saveModelSnapshot({
+      modelId: 'history-a',
+      tabs: [{
+        id: 'main',
+        name: 'Model.ump',
+        code: 'class RemoteChange {}',
+      }],
+      activeTabId: 'main',
+      reason: 'manual',
+      parentSnapshotId: original.id,
+    })
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'umple-version-history-v1',
+        }),
+      )
+    })
+
+    const notification = toastMocks.info.mock.calls.find(
+      ([message]) => message === 'A newer model version is available.',
+    )
+
+    expect(notification).toBeDefined()
+
+    // The user edits the model after receiving the notification.
+    act(() => {
+      useSessionStore.getState().setCode('class NewLocalWork {}')
+    })
+
+    // The user clicks the now-stale update notification.
+    act(() => {
+      notification![1].action.onClick()
+    })
+
+    // The newer local work must remain untouched.
+    expect(useSessionStore.getState().tabs[0].code)
+      .toBe('class NewLocalWork {}')
+
+    expect(toastMocks.warning).toHaveBeenCalledWith(
+      'Your model changed after this notification. Review Version History before updating.',
+    )
+  })
+  it('uses the restored revision as the parent of subsequent edits', () => {
+    render(<HistoryTestComponent />)
+
+    const original = getModelSnapshots('history-a')[0]
+    expect(original).toBeDefined()
+
+    const remote = saveModelSnapshot({
+      modelId: 'history-a',
+      tabs: [{
+        id: 'main',
+        name: 'Model.ump',
+        code: 'class RemoteVersion {}',
+      }],
+      activeTabId: 'main',
+      reason: 'manual',
+      parentSnapshotId: original.id,
+    })
+
+    expect(remote).not.toBeNull()
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'umple-version-history-v1',
+        }),
+      )
+    })
+
+    const notification = toastMocks.info.mock.calls.find(
+      ([message]) => message === 'A newer model version is available.',
+    )
+
+    expect(notification).toBeDefined()
+
+    act(() => {
+      notification![1].action.onClick()
+    })
+
+    expect(useSessionStore.getState().tabs[0].code)
+      .toBe('class RemoteVersion {}')
+
+    // Edit the restored version.
+    act(() => {
+      useSessionStore.getState().setCode('class EditedRestoredVersion {}')
+      vi.advanceTimersByTime(5000)
+    })
+
+    const latest = getModelSnapshots('history-a')[0]
+
+    expect(latest.tabs[0].code)
+      .toBe('class EditedRestoredVersion {}')
+
+    expect(latest.parentSnapshotId)
+      .toBe(remote!.id)
+  })
+  it('tracks the restored revision after a manual restore event', () => {
+    render(<HistoryTestComponent />)
+
+    const original = getModelSnapshots('history-a')[0]
+    expect(original).toBeDefined()
+
+    // Save another version.
+    act(() => {
+      useSessionStore.getState().setCode('class VersionB {}')
+      vi.advanceTimersByTime(5000)
+    })
+
+    const versionB = getModelSnapshots('history-a')[0]
+    expect(versionB.id).not.toBe(original.id)
+
+    // Simulate the successful manual restore performed by the dialog.
+    act(() => {
+      useSessionStore.getState().restoreTabs(
+        original.tabs,
+        original.activeTabId,
+      )
+
+      window.dispatchEvent(
+        new CustomEvent('umple-version-restored', {
+          detail: {
+            modelId: 'history-a',
+            snapshotId: original.id,
+            tabs: original.tabs,
+          },
+        }),
+      )
+    })
+
+    // Edit the restored version.
+    act(() => {
+      useSessionStore.getState().setCode('class EditedVersionA {}')
+      vi.advanceTimersByTime(5000)
+    })
+
+    const latest = getModelSnapshots('history-a')[0]
+
+    expect(latest.tabs[0].code)
+      .toBe('class EditedVersionA {}')
+
+    expect(latest.parentSnapshotId)
+      .toBe(original.id)
+  })
+
+  it('warns when a remote revision has unknown ancestry', () => {
+    render(<HistoryTestComponent />)
+
+    // Save a revision that has no parent metadata.
+    saveModelSnapshot({
+      modelId: 'history-a',
+      tabs: [{
+        id: 'main',
+        name: 'Model.ump',
+        code: 'class UnknownRevision {}',
+      }],
+      activeTabId: 'main',
+      reason: 'manual',
+    })
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'umple-version-history-v1',
+        }),
+      )
+    })
+
+    expect(toastMocks.warning).toHaveBeenCalledWith(
+      'The latest model version has unknown ancestry. Review Version History before restoring.',
+      expect.objectContaining({
+        id: 'version-history-history-a',
+      }),
+    )
+
+    expect(toastMocks.info).not.toHaveBeenCalledWith(
+      'A newer model version is available.',
+      expect.anything(),
+    )
+
+    expect(useSessionStore.getState().tabs[0].code)
+      .toBe('class ModelA {}')
+  })
+
+  it('preserves unsaved local edits when a remote revision has unknown ancestry', () => {
+    // Create an existing saved revision with different content.
+    saveModelSnapshot({
+      modelId: 'history-a',
+      tabs: [{
+        id: 'main',
+        name: 'Model.ump',
+        code: 'class PreviouslySaved {}',
+      }],
+      activeTabId: 'main',
+      reason: 'manual',
+    })
+
+    // The hook creates an initial automatic backup when mounted.
+render(<HistoryTestComponent />)
+
+const snapshots = getModelSnapshots('history-a')
+const localRevision = snapshots.find(
+  (snapshot) =>
+    snapshot.tabs[0].code === 'class ModelA {}',
+)
+
+expect(localRevision).toBeDefined()
+
+// Change the editor without waiting for the debounce backup.
+// The current editor content now has no matching saved snapshot.
+act(() => {
+  useSessionStore.getState().setCode('class UnsavedLocalChange {}')
+})
+
+const updatedSnapshots = getModelSnapshots('history-a')
+
+expect(
+  updatedSnapshots.some(
+    (snapshot) =>
+      snapshot.tabs[0].code === 'class UnsavedLocalChange {}',
+  ),
+).toBe(false)
+
+    // A remote browser tab saves a new version without ancestry.
+    saveModelSnapshot({
+      modelId: 'history-a',
+      tabs: [{
+        id: 'main',
+        name: 'Model.ump',
+        code: 'class RemoteUnknown {}',
+      }],
+      activeTabId: 'main',
+      reason: 'manual',
+    })
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'umple-version-history-v1',
+        }),
+      )
+    })
+
+    expect(toastMocks.warning).toHaveBeenCalledWith(
+      'The latest model version has unknown ancestry. Review Version History before restoring.',
+      expect.objectContaining({
+        id: 'version-history-history-a',
+      }),
+    )
+
+    expect(toastMocks.info).not.toHaveBeenCalledWith(
+      'A newer model version is available.',
+      expect.anything(),
+    )
+
+    expect(useSessionStore.getState().tabs[0].code)
+      .toBe('class UnsavedLocalChange {}')
+  })
+
   it('detects a backup saved by another browser tab', () => {
     render(<HistoryTestComponent />)
+
+    const original = getModelSnapshots('history-a')[0]
+    expect(original).toBeDefined()
 
     saveModelSnapshot({
       modelId: 'history-a',
@@ -187,6 +611,7 @@ describe('useVersionHistory integration', () => {
       }],
       activeTabId: 'main',
       reason: 'manual',
+      parentSnapshotId: original.id,
     })
 
     act(() => {
@@ -236,6 +661,9 @@ describe('useVersionHistory integration', () => {
   it('updates to the latest version and preserves current work', () => {
     render(<HistoryTestComponent />)
 
+    const original = getModelSnapshots('history-a')[0]
+    expect(original).toBeDefined()
+
     saveModelSnapshot({
       modelId: 'history-a',
       tabs: [{
@@ -245,6 +673,7 @@ describe('useVersionHistory integration', () => {
       }],
       activeTabId: 'main',
       reason: 'manual',
+      parentSnapshotId: original.id,
     })
 
     act(() => {
@@ -284,6 +713,9 @@ describe('useVersionHistory integration', () => {
   it('keeps current changes when the user declines the update', () => {
     render(<HistoryTestComponent />)
 
+    const original = getModelSnapshots('history-a')[0]
+    expect(original).toBeDefined()
+
     saveModelSnapshot({
       modelId: 'history-a',
       tabs: [{
@@ -293,6 +725,7 @@ describe('useVersionHistory integration', () => {
       }],
       activeTabId: 'main',
       reason: 'manual',
+      parentSnapshotId: original.id,
     })
 
     act(() => {

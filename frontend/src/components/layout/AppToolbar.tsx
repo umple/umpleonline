@@ -661,7 +661,7 @@ export function AppToolbar() {
       onSelect={() => setVersionHistoryOpen(true)}
     >
       <History className="size-3.5" />
-      Restore Earlier Version
+      Version History
     </DropdownMenuItem>
   </DropdownMenuContent>
 </DropdownMenu>
