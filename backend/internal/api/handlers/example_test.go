@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -269,6 +271,176 @@ func TestResolveBundledPathBasedLegacyExample(t *testing.T) {
 	}
 }
 
+func TestResolveLibraryExampleFromUpstream(t *testing.T) {
+	requested := make([]string, 0, 2)
+	server := newTestLibraryServer(t, &requested, map[string]string{
+		"/manualexamples/BasicStateMachines1.ump": "class GarageDoor {}",
+		"/VendingMachine.ump":                     "class VendingMachine {}",
+	})
+	handler := newTestLibraryExampleHandler(t, server.URL)
+
+	for _, example := range []struct {
+		name string
+		code string
+	}{
+		{name: "manualexamples/BasicStateMachines1", code: "class GarageDoor {}"},
+		{name: "VendingMachine", code: "class VendingMachine {}"},
+	} {
+		res := resolveTestExample(t, handler, example.name)
+		if res.Code != http.StatusOK {
+			t.Fatalf("resolve %q status = %d, body = %s", example.name, res.Code, res.Body.String())
+		}
+
+		var resp ExampleResponse
+		if err := json.Unmarshal(res.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode resolve response: %v", err)
+		}
+		if resp.Code != example.code {
+			t.Fatalf("unexpected library example code: %q", resp.Code)
+		}
+		if resp.Name != path.Base(example.name) {
+			t.Fatalf("unexpected library example name: %q", resp.Name)
+		}
+		if resp.SetID != "" || resp.DefaultCategoryID != "" {
+			t.Fatalf("expected library example to carry no set or category, got %q and %q", resp.SetID, resp.DefaultCategoryID)
+		}
+	}
+
+	if len(requested) != 2 {
+		t.Fatalf("expected two library requests, got %v", requested)
+	}
+}
+
+func TestResolveManifestExampleSkipsLibrary(t *testing.T) {
+	requested := make([]string, 0, 1)
+	server := newTestLibraryServer(t, &requested, map[string]string{})
+	handler := newTestLibraryExampleHandler(t, server.URL)
+
+	res := resolveTestExample(t, handler, "2DShapes")
+	if res.Code != http.StatusOK {
+		t.Fatalf("resolve bundled example status = %d, body = %s", res.Code, res.Body.String())
+	}
+
+	var resp ExampleResponse
+	if err := json.Unmarshal(res.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode resolve response: %v", err)
+	}
+	if resp.Label != "2DShapes *" {
+		t.Fatalf("unexpected bundled example label: %q", resp.Label)
+	}
+	if len(requested) != 0 {
+		t.Fatalf("expected no library requests for a bundled example, got %v", requested)
+	}
+}
+
+func TestResolveLibraryExampleMissingUpstream(t *testing.T) {
+	requested := make([]string, 0, 1)
+	server := newTestLibraryServer(t, &requested, map[string]string{})
+	handler := newTestLibraryExampleHandler(t, server.URL)
+
+	res := resolveTestExample(t, handler, "manualexamples/NoSuchExample")
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("resolve missing example status = %d, body = %s", res.Code, res.Body.String())
+	}
+	if len(requested) != 1 {
+		t.Fatalf("expected one library request, got %v", requested)
+	}
+}
+
+func TestResolveRejectsUnsafeLibraryExamplePaths(t *testing.T) {
+	requested := make([]string, 0, 1)
+	server := newTestLibraryServer(t, &requested, map[string]string{})
+	handler := newTestLibraryExampleHandler(t, server.URL)
+
+	for _, example := range []string{
+		"../../etc/passwd",
+		"..",
+		"manualexamples/../../../etc/passwd",
+		"//etc/passwd",
+		"manualexamples//BasicStateMachines1",
+		"./BasicStateMachines1",
+		"manualexamples/Basic State Machines1",
+		"https://example.com/Evil",
+		"manualexamples/Basic\\StateMachines1",
+	} {
+		res := resolveTestExample(t, handler, example)
+		if res.Code != http.StatusNotFound {
+			t.Fatalf("resolve %q status = %d, body = %s", example, res.Code, res.Body.String())
+		}
+	}
+
+	if len(requested) != 0 {
+		t.Fatalf("expected no library requests for unsafe paths, got %v", requested)
+	}
+}
+
+func TestResolveLibraryExampleRejectsOversizedResponse(t *testing.T) {
+	requested := make([]string, 0, 1)
+	// A body this large is sent chunked, so the limit cannot rely on Content-Length.
+	server := newTestLibraryServer(t, &requested, map[string]string{
+		"/manualexamples/Huge.ump": strings.Repeat("a", maxLibraryExampleBytes+1),
+	})
+	handler := newTestLibraryExampleHandler(t, server.URL)
+
+	res := resolveTestExample(t, handler, "manualexamples/Huge")
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("resolve oversized example status = %d, body = %s", res.Code, res.Body.String())
+	}
+}
+
+func TestResolveLibraryExampleDoesNotFollowRedirects(t *testing.T) {
+	followed := make([]string, 0, 1)
+	target := newTestLibraryServer(t, &followed, map[string]string{
+		"/extraExamples1/Redirected.ump": "class Redirected {}",
+	})
+
+	library := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+r.URL.Path, http.StatusFound)
+	}))
+	t.Cleanup(library.Close)
+
+	handler := newTestLibraryExampleHandler(t, library.URL)
+	writeTextFixture(t, filepath.Join(handler.examplePath, "extraExamples1", "Redirected.ump"), "class Bundled {}")
+
+	res := resolveTestExample(t, handler, "extraExamples1/Redirected")
+	if res.Code != http.StatusOK {
+		t.Fatalf("resolve redirected example status = %d, body = %s", res.Code, res.Body.String())
+	}
+
+	var resp ExampleResponse
+	if err := json.Unmarshal(res.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode resolve response: %v", err)
+	}
+	if resp.Code != "class Bundled {}" {
+		t.Fatalf("expected the bundled copy to be served, got %q", resp.Code)
+	}
+	if len(followed) != 0 {
+		t.Fatalf("expected the redirect target to receive no requests, got %v", followed)
+	}
+}
+
+func TestResolveLibraryExampleFallsBackToBundledCopy(t *testing.T) {
+	requested := make([]string, 0, 1)
+	server := newTestLibraryServer(t, &requested, map[string]string{})
+	server.Close()
+
+	handler := newTestLibraryExampleHandler(t, server.URL)
+	writeTextFixture(t, filepath.Join(handler.examplePath, "extraExamples1", "Unlisted.ump"), "class Unlisted {}")
+
+	res := resolveTestExample(t, handler, "extraExamples1/Unlisted")
+	if res.Code != http.StatusOK {
+		t.Fatalf("resolve unreachable library example status = %d, body = %s", res.Code, res.Body.String())
+	}
+
+	var resp ExampleResponse
+	if err := json.Unmarshal(res.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode resolve response: %v", err)
+	}
+	if resp.Code != "class Unlisted {}" {
+		t.Fatalf("expected the bundled copy to be served, got %q", resp.Code)
+	}
+}
+
 func newTestExampleHandler(t *testing.T) *ExampleHandler {
 	t.Helper()
 
@@ -347,6 +519,46 @@ func newTestExampleRoot(t *testing.T) string {
 	writeTextFixture(t, filepath.Join(root, "PingPong.ump"), "class Ping {}")
 
 	return root
+}
+
+func newTestLibraryExampleHandler(t *testing.T, libraryURL string) *ExampleHandler {
+	t.Helper()
+
+	store, err := model.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("create model store: %v", err)
+	}
+
+	cfg := &config.Config{
+		ExamplePath:    newTestExampleRoot(t),
+		ExampleLibrary: libraryURL,
+	}
+	return NewExampleHandler(cfg, store)
+}
+
+func newTestLibraryServer(t *testing.T, requested *[]string, files map[string]string) *httptest.Server {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		*requested = append(*requested, r.URL.Path)
+		code, ok := files[r.URL.Path]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Write([]byte(code))
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func resolveTestExample(t *testing.T, handler *ExampleHandler, example string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/examples/resolve?example="+url.QueryEscape(example), nil)
+	res := httptest.NewRecorder()
+	handler.Resolve(res, req)
+	return res
 }
 
 func writeJSONFixture(t *testing.T, target string, value any) {
