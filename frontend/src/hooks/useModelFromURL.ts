@@ -5,7 +5,6 @@ import { useEphemeralStore } from "../stores/ephemeralStore";
 import { usePreferencesStore } from "../stores/preferencesStore";
 import { isTemporaryModel } from "../lib/modelId";
 import { getViewForLegacyDiagramType } from "../constants/diagram";
-import { getDefaultViewForExampleCategory } from "../constants/examples";
 import { getGenerateTarget, getGenerateTargetIdForView } from "../generation/targets";
 import { api } from "../api/client";
 
@@ -23,6 +22,22 @@ const initialReadOnly = initialParams.has("readOnly");
 
 /** ?generateDefault= param. */
 const initialGenerateDefault = initialParams.get("generateDefault");
+
+/**
+ * Resolves ?generateDefault= to a known generate target ID, case-insensitively:
+ * exact match first, then a capitalized match for IDs like "Java", "Python".
+ * Returns null when the param is absent or names no known target.
+ */
+function resolveInitialGenerateTargetId(): string | null {
+  if (!initialGenerateDefault) return null;
+  if (getGenerateTarget(initialGenerateDefault)) return initialGenerateDefault;
+  const lower = initialGenerateDefault.toLowerCase();
+  const capitalized = lower.charAt(0).toUpperCase() + lower.slice(1);
+  return getGenerateTarget(capitalized) ? capitalized : null;
+}
+
+/** The explicitly requested generate target, or null when absent/invalid. */
+const initialGenerateTargetId = resolveInitialGenerateTargetId();
 
 /**
  * Read the persisted modelId from sessionStorage (Zustand hydrates async, so
@@ -69,28 +84,31 @@ export function useModelFromURL() {
   const setModelId = useSessionStore((s) => s.setModelId);
   const restoreTabs = useSessionStore((s) => s.restoreTabs);
   const loadExample = useSessionStore((s) => s.loadExample);
-  const setViewMode = useSessionStore((s) => s.setViewMode);
   const modelId = useSessionStore((s) => s.modelId);
 
   const resolvedRef = useRef(!needsResolve);
 
   // Apply simple URL options synchronously on first mount.
   useEffect(() => {
-    // ?diagramtype=
-    if (initialDiagramType) {
-      const mapped = getViewForLegacyDiagramType(initialDiagramType);
-      if (mapped) {
-        const targetId = getGenerateTargetIdForView(mapped);
-        useSessionStore.getState().setViewMode(mapped);
-        if (targetId) useSessionStore.getState().setGenerateTargetId(targetId);
-      }
+    // ?diagramtype=. Like classic UmpleOnline, an ?example= without one opens
+    // the class diagram, whatever the example's menu category or the view the
+    // previous session left selected.
+    const urlView = initialDiagramType
+      ? getViewForLegacyDiagramType(initialDiagramType)
+      : initialUrlExample
+        ? "class"
+        : null;
+    if (urlView) {
+      const targetId = getGenerateTargetIdForView(urlView);
+      useSessionStore.getState().setViewMode(urlView);
+      if (targetId) useSessionStore.getState().setGenerateTargetId(targetId);
+    }
 
-      // Class diagram types carry the Traits option, as in legacy UmpleOnline.
-      if (mapped === "class") {
-        const showTraits = initialDiagramType === "GvClassTrait";
-        if (usePreferencesStore.getState().showTraits !== showTraits) {
-          usePreferencesStore.getState().toggleDisplayPref("showTraits");
-        }
+    // Class diagram types carry the Traits option, as in legacy UmpleOnline.
+    if (initialDiagramType && urlView === "class") {
+      const showTraits = initialDiagramType === "GvClassTrait";
+      if (usePreferencesStore.getState().showTraits !== showTraits) {
+        usePreferencesStore.getState().toggleDisplayPref("showTraits");
       }
     }
 
@@ -99,19 +117,9 @@ export function useModelFromURL() {
       useEphemeralStore.getState().setReadOnly(true);
     }
 
-    // ?generateDefault=
-    if (initialGenerateDefault) {
-      // Case-insensitive lookup: try exact match first, then lowercase match.
-      if (getGenerateTarget(initialGenerateDefault)) {
-        useSessionStore.getState().setGenerateTargetId(initialGenerateDefault);
-      } else {
-        const lower = initialGenerateDefault.toLowerCase();
-        // Capitalize first letter to match target IDs like "Java", "Python".
-        const capitalized = lower.charAt(0).toUpperCase() + lower.slice(1);
-        if (getGenerateTarget(capitalized)) {
-          useSessionStore.getState().setGenerateTargetId(capitalized);
-        }
-      }
+    // ?generateDefault= — applied last so it outranks ?diagramtype='s target.
+    if (initialGenerateTargetId) {
+      useSessionStore.getState().setGenerateTargetId(initialGenerateTargetId);
     }
   }, []);
 
@@ -124,18 +132,9 @@ export function useModelFromURL() {
       .resolveExample(initialUrlExample)
       .then((res) => {
         if (cancelled) return;
+        // The diagram view was already chosen from the URL on mount; the
+        // example's menu category only applies when picked from a menu.
         loadExample(res.id, res.name, res.code, res.modelId, res.setId ?? null);
-
-        if (!initialDiagramType && res.defaultCategoryId) {
-          const nextView = getDefaultViewForExampleCategory(
-            res.defaultCategoryId,
-          );
-          if (nextView) {
-            const targetId = getGenerateTargetIdForView(nextView);
-            setViewMode(nextView);
-            if (targetId) useSessionStore.getState().setGenerateTargetId(targetId);
-          }
-        }
       })
       .catch(() => {
         if (cancelled) return;
@@ -153,7 +152,7 @@ export function useModelFromURL() {
     return () => {
       cancelled = true;
     };
-  }, [loadExample, setViewMode]);
+  }, [loadExample]);
 
   // Load model from ?model= or sessionStorage on mount.
   useEffect(() => {
