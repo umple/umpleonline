@@ -24,7 +24,10 @@ const exampleManifestFileName = "example_manifest.json"
 const maxLibraryExampleBytes = 1 << 20
 
 // Example names may address subdirectories of the Umple library, but nothing
-// outside it. Classic UmpleOnline restricts the argument the same way.
+// outside it. Classic UmpleOnline instead strips every character other than
+// letters, digits, '_', '-' and '/', so it cannot open dotted names such as
+// extraExamples1/ASM.ecore. Here they are allowed, and invalid names are
+// rejected rather than rewritten.
 var libraryExamplePattern = regexp.MustCompile(`^[A-Za-z0-9_.\-/]+$`)
 
 type ExampleEntry struct {
