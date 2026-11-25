@@ -62,19 +62,29 @@ Five services, all containerized with Docker:
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, available commands, and contribution guidelines.
 
-## Bundled Examples
+## Examples
 
-The example picker is driven by committed files under `examples/`, not by runtime fetches from the running app. Refresh that snapshot from the legacy Umple repo with:
+Example sources come from the Umple library at <https://umple.org/umpleonline/umplibrary/>, which is updated whenever Umple merges to master, so this repo keeps no duplicate copies of them. Each request tries the library first, then a runtime cache, then the example files seeded into the backend image.
+
+`examples/example_manifest.json` stays in the repo: it holds the picker's menu metadata (labels, ordering, categories and source paths), which the library listing does not provide. Refresh it from the legacy Umple repo with:
 
 ```bash
 make sync-examples
 ```
 
-By default this syncs from `https://github.com/umple/umple.git` at `master`. You can override the source ref if needed:
+By default this reads the menus from `https://github.com/umple/umple.git` at `master`. You can override the source ref if needed:
 
 ```bash
 make sync-examples LEGACY_UMPLE_REF=my-legacy-branch
 ```
+
+Download the examples themselves into `examples/` with:
+
+```bash
+make fetch-examples
+```
+
+Those files are gitignored and act as the offline seed. Run it before working offline; the backend image is seeded the same way when images are published.
 
 ## License
 

@@ -1,8 +1,9 @@
-.PHONY: dev dev-backend dev-frontend install up-prod down logs logs-backend clean tidy fetch-jar sync-examples test-e2e test-e2e-live test-e2e-ui check check-frontend check-backend
+.PHONY: dev dev-backend dev-frontend install up-prod down logs logs-backend clean tidy fetch-jar fetch-examples sync-examples test-e2e test-e2e-live test-e2e-ui check check-frontend check-backend
 
 UMPLESYNC_JAR_URL ?= https://try.umple.org/scripts/umplesync.jar
 export UMPLE_LSP_VERSION ?= $(shell npm view umple-lsp-server version 2>/dev/null || echo latest)
 export DOCKER_GID := $(shell stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)
+UMPLE_LIBRARY_URL ?= https://umple.org/umpleonline/umplibrary/
 LEGACY_UMPLE_GIT_URL ?= https://github.com/umple/umple.git
 LEGACY_UMPLE_REF ?= master
 
@@ -99,6 +100,11 @@ fetch-jar:
 	@echo "Downloaded jars/umplesync.jar"
 	@echo "Recorded jars/umplesync.jar.sha256"
 
-# Refresh the committed example manifest and bundled example files from the legacy repo
+# Download the Umple example library into examples/, which seeds the offline
+# example cache baked into the backend image. Overwrites examples/*.ump.
+fetch-examples:
+	bun scripts/fetch-examples.ts --library-url "$(UMPLE_LIBRARY_URL)"
+
+# Refresh the committed example menu metadata (examples/example_manifest.json) from the legacy repo
 sync-examples:
 	bun scripts/sync-examples.ts --legacy-repo "$(LEGACY_UMPLE_GIT_URL)" --legacy-ref "$(LEGACY_UMPLE_REF)"

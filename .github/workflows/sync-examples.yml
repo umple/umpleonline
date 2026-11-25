@@ -1,10 +1,10 @@
-name: Sync Examples
+name: Sync Example Menus
 
 on:
   workflow_dispatch:
     inputs:
       legacy_ref:
-        description: Legacy Umple git ref to sync from
+        description: Legacy Umple git ref to read the example menus from
         required: false
         default: master
         type: string
@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   sync:
-    name: Sync bundled legacy examples
+    name: Sync example menu metadata
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -29,7 +29,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
-      - name: Sync examples from legacy repo
+      - name: Sync example menu metadata from legacy repo
         env:
           LEGACY_REF: ${{ inputs.legacy_ref || 'master' }}
         run: |
@@ -40,10 +40,13 @@ jobs:
       - name: Create or update pull request
         uses: peter-evans/create-pull-request@v7
         with:
-          commit-message: "chore(examples): sync bundled legacy examples"
-          title: "chore(examples): sync bundled legacy examples"
+          commit-message: "chore(examples): sync example menu metadata"
+          title: "chore(examples): sync example menu metadata"
           body: |
-            Automated sync of bundled examples from the legacy Umple repository.
+            Automated sync of `examples/example_manifest.json` (menu labels,
+            ordering, categories and source paths) from the legacy Umple
+            repository. Example sources themselves are fetched from
+            https://umple.org/umpleonline/umplibrary/ at runtime.
 
             Source:
             - Repo: `https://github.com/umple/umple.git`

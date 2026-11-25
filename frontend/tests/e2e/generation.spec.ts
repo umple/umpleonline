@@ -1,5 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
-import type { GenerationRequest } from '../../src/api/types'
+import type {
+  ExampleEntry,
+  ExampleResponse,
+  ExampleSet,
+  GenerationRequest,
+} from '../../src/api/types'
 
 test.describe.configure({ timeout: 45_000 })
 
@@ -23,7 +28,7 @@ function getLastRequest(requests: GenerationRequest[]) {
 
 function addPreferencesInitScript(
   page: Page,
-  { dynamicGeneration = true }: { dynamicGeneration?: boolean } = {},
+  { dynamicGeneration = true, showTraits = false }: { dynamicGeneration?: boolean; showTraits?: boolean } = {},
 ) {
   return page.addInitScript((prefs) => {
     localStorage.setItem(
@@ -32,11 +37,12 @@ function addPreferencesInitScript(
         state: {
           hasSeenWelcome: true,
           dynamicGeneration: prefs.dynamicGeneration,
+          showTraits: prefs.showTraits,
         },
         version: 4,
       }),
     )
-  }, { dynamicGeneration })
+  }, { dynamicGeneration, showTraits })
 }
 
 async function setEditorCode(page: Page, code: string) {
@@ -199,6 +205,131 @@ async function installDiagramRoutes(page: Page, requests: GenerationRequest[]) {
   })
 }
 
+type ExampleFixture = ExampleEntry & Pick<ExampleResponse, 'setId' | 'defaultCategoryId'>
+
+// A small slice of the example manifest. Auction appears in both the class and
+// state menus, as in classic UmpleOnline.
+const EXAMPLE_SETS: ExampleSet[] = [
+  {
+    id: 'example-set-1',
+    label: 'Class Diagrams',
+    categoryId: 'class',
+    examples: [{ id: 'ex-class-auction', name: 'Auction', label: 'Auction *', filename: 'Auction.ump' }],
+  },
+  {
+    id: 'example-set-3',
+    label: 'State Machines',
+    categoryId: 'state',
+    examples: [
+      { id: 'ex-state-auction', name: 'Auction', label: 'Auction *', filename: 'Auction.ump' },
+      { id: 'ex-state-microwave', name: 'MicrowaveOven2', label: 'Microwave Oven *', filename: 'MicrowaveOven2.ump' },
+    ],
+  },
+  {
+    id: 'example-set-5',
+    label: 'Composite Structure',
+    categoryId: 'structure',
+    examples: [{ id: 'ex-structure-pingpong', name: 'PingPong', label: 'Ping Pong', filename: 'PingPong.ump' }],
+  },
+]
+
+const EXAMPLES_BY_ID = new Map<string, ExampleFixture>(
+  EXAMPLE_SETS.flatMap((set) =>
+    set.examples.map((example) => [
+      example.id,
+      { ...example, setId: set.id, defaultCategoryId: set.categoryId },
+    ] as const),
+  ),
+)
+
+// Mirrors the backend: a URL name resolves to its first manifest entry, and a
+// library path outside the manifest resolves without a set or category.
+const RESOLVED_EXAMPLES: Record<string, ExampleFixture | undefined> = {
+  Auction: EXAMPLES_BY_ID.get('ex-class-auction'),
+  MicrowaveOven2: EXAMPLES_BY_ID.get('ex-state-microwave'),
+  PingPong: EXAMPLES_BY_ID.get('ex-structure-pingpong'),
+  'manualexamples/BasicStateMachines1': {
+    id: 'ex-library-basic-state-machines',
+    name: 'BasicStateMachines1',
+    label: 'BasicStateMachines1',
+    filename: 'manualexamples/BasicStateMachines1.ump',
+  },
+}
+
+function findExample(url: URL): ExampleFixture | undefined {
+  if (url.pathname === '/api/examples/resolve') {
+    return RESOLVED_EXAMPLES[url.searchParams.get('example') ?? '']
+  }
+  return EXAMPLES_BY_ID.get(url.pathname.split('/').pop() ?? '')
+}
+
+function exampleResponse(example: ExampleFixture): ExampleResponse {
+  return {
+    id: example.id,
+    name: example.name,
+    label: example.label,
+    // The comment keeps different files' code distinct so loading one recompiles.
+    code: `class Invoice { number; }\n// ${example.filename}`,
+    setId: example.setId,
+    defaultCategoryId: example.defaultCategoryId,
+  }
+}
+
+async function installExampleRoutes(page: Page) {
+  await page.route(
+    (url) => url.pathname.startsWith('/api/examples'),
+    async (route) => {
+      const url = new URL(route.request().url())
+
+      if (url.pathname === '/api/examples') {
+        await route.fulfill({ json: EXAMPLE_SETS })
+        return
+      }
+
+      const example = findExample(url)
+      if (!example) {
+        await route.fulfill({ status: 404, json: { error: 'example not found' } })
+        return
+      }
+      await route.fulfill({ json: exampleResponse(example) })
+    },
+  )
+}
+
+// Seeds what an earlier visit in the same browser tab left in sessionStorage.
+function addPersistedSessionInitScript(
+  page: Page,
+  session: { viewMode: string; generateTargetId: string },
+) {
+  return page.addInitScript((state) => {
+    sessionStorage.setItem('umple-session-v1', JSON.stringify({ state, version: 2 }))
+  }, session)
+}
+
+// Waits for the compiled class diagram of the requested example, then checks
+// that no other diagram or code target was requested on the way, such as one
+// left by an earlier session.
+async function expectOnlyClassDiagramRequests(
+  page: Page,
+  requests: GenerationRequest[],
+  example: string,
+) {
+  await expect(page.getByTestId('class-node-Invoice')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByTestId('generate-target-wrapper')).toContainText('GraphViz Class Diagram')
+  expect(requests.length).toBeGreaterThan(0)
+  for (const request of requests) {
+    expect(request.code).toContain(`// ${example}.ump`)
+    expect(request.diagramType).toBe('GvClassDiagram')
+    expect(request.language ?? null).toBe(null)
+  }
+}
+
+async function pickToolbarExample(page: Page, setLabel: string, exampleLabel: string) {
+  await page.getByTestId('app-toolbar').getByRole('button', { name: 'Examples' }).click()
+  await page.getByRole('button', { name: setLabel, exact: true }).click()
+  await page.getByRole('button', { name: exampleLabel, exact: true }).click()
+}
+
 test.describe('Generation UI', () => {
   test('uses class diagram generation as the default output target', async ({ page }) => {
     const requests: GenerationRequest[] = []
@@ -219,6 +350,315 @@ test.describe('Generation UI', () => {
     await expect
       .poll(() => getLastRequest(requests)?.language ?? null)
       .toBe(null)
+  })
+
+  test('keeps the diagramtype URL option as the output target after compiling', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+
+    await page.goto('/?diagramtype=GvState')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await setEditorCode(page, 'class Invoice { number; }')
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvStateDiagram')
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText(
+      'State Diagram (GraphViz SVG)',
+    )
+  })
+
+  test('enables traits for the GvClassTrait diagramtype URL option', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+
+    await page.goto('/?diagramtype=GvClassTrait')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await setEditorCode(page, 'class Invoice { number; }')
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvClassTraitDiagram')
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText(
+      'GraphViz Class Diagram',
+    )
+  })
+
+  test('keeps traits enabled when GvClassTrait is requested again', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page, { showTraits: true })
+    await installGenerationRoutes(page, requests)
+
+    await page.goto('/?diagramtype=GvClassTrait')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await setEditorCode(page, 'class Invoice { number; }')
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvClassTraitDiagram')
+  })
+
+  test('generates an ordinary class diagram for GvClass when traits were enabled', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page, { showTraits: true })
+    await installGenerationRoutes(page, requests)
+
+    await page.goto('/?diagramtype=GvClass')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await setEditorCode(page, 'class Invoice { number; }')
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvClassDiagram')
+  })
+
+  test('keeps the traits preference when no diagramtype is requested', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page, { showTraits: true })
+    await installGenerationRoutes(page, requests)
+
+    await page.goto('/')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await setEditorCode(page, 'class Invoice { number; }')
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvClassTraitDiagram')
+  })
+
+  // Classic UmpleOnline opens ?example= as GvClass unless ?diagramtype= says
+  // otherwise, whatever menu the example belongs to.
+  for (const example of ['MicrowaveOven2', 'PingPong', 'manualexamples/BasicStateMachines1']) {
+    test(`opens a bare ${example} example URL as a class diagram after compiling`, async ({ page }) => {
+      const requests: GenerationRequest[] = []
+      await addPreferencesInitScript(page)
+      await installGenerationRoutes(page, requests)
+      await installExampleRoutes(page)
+
+      await page.goto(`/?example=${example}`)
+      await expect(page.getByTestId('app-shell')).toBeVisible()
+
+      await expectOnlyClassDiagramRequests(page, requests, example)
+    })
+  }
+
+  const persistedSessions = [
+    { example: 'MicrowaveOven2', viewMode: 'state', generateTargetId: 'stateDiagram' },
+    { example: 'PingPong', viewMode: 'structure', generateTargetId: 'StructureDiagram' },
+    { example: 'manualexamples/BasicStateMachines1', viewMode: 'state', generateTargetId: 'stateDiagram' },
+    { example: 'manualexamples/BasicStateMachines1', viewMode: 'feature', generateTargetId: 'featureDiagram' },
+    { example: 'MicrowaveOven2', viewMode: 'class', generateTargetId: 'Java' },
+  ]
+  for (const { example, viewMode, generateTargetId } of persistedSessions) {
+    test(`opens a bare ${example} example URL as a class diagram after a ${generateTargetId} session`, async ({ page }) => {
+      const requests: GenerationRequest[] = []
+      await addPreferencesInitScript(page)
+      await addPersistedSessionInitScript(page, { viewMode, generateTargetId })
+      await installGenerationRoutes(page, requests)
+      await installExampleRoutes(page)
+
+      await page.goto(`/?example=${example}`)
+      await expect(page.getByTestId('app-shell')).toBeVisible()
+
+      await expectOnlyClassDiagramRequests(page, requests, example)
+    })
+  }
+
+  test('restores the previous session target when no example URL is supplied', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await addPersistedSessionInitScript(page, { viewMode: 'state', generateTargetId: 'stateDiagram' })
+    await installGenerationRoutes(page, requests)
+
+    await page.goto('/')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await setEditorCode(page, 'class Invoice { number; }')
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvStateDiagram')
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText(
+      'State Diagram (GraphViz SVG)',
+    )
+  })
+
+  for (const example of ['MicrowaveOven2', 'manualexamples/BasicStateMachines1']) {
+    test(`keeps diagramtype=state for the ${example} example URL after compiling`, async ({ page }) => {
+      const requests: GenerationRequest[] = []
+      await addPreferencesInitScript(page)
+      await installGenerationRoutes(page, requests)
+      await installExampleRoutes(page)
+
+      await page.goto(`/?example=${example}&diagramtype=state`)
+      await expect(page.getByTestId('app-shell')).toBeVisible()
+
+      await expect
+        .poll(() => getLastRequest(requests)?.diagramType)
+        .toBe('GvStateDiagram')
+      await expect(page.getByTestId('generate-target-wrapper')).toContainText(
+        'State Diagram (GraphViz SVG)',
+      )
+    })
+  }
+
+  test('keeps an explicit GvClass diagramtype for an example URL', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+    await installExampleRoutes(page)
+
+    await page.goto('/?example=MicrowaveOven2&diagramtype=GvClass')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvClassDiagram')
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText(
+      'GraphViz Class Diagram',
+    )
+  })
+
+  test('enables traits for the GvClassTrait diagramtype on an example URL', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+    await installExampleRoutes(page)
+
+    await page.goto('/?example=MicrowaveOven2&diagramtype=GvClassTrait')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvClassTraitDiagram')
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText(
+      'GraphViz Class Diagram',
+    )
+  })
+
+  test('keeps an explicit generateDefault as the output target after the example loads', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+    await installExampleRoutes(page)
+
+    await page.goto('/?example=MicrowaveOven2&generateDefault=Java')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await expect
+      .poll(() => getLastRequest(requests)?.language)
+      .toBe('Java')
+    await expect(page.getByTestId('generated-output-highlighted-all-code')).toContainText(
+      'InvoiceGenerated',
+      { timeout: 10_000 },
+    )
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText('Java Code')
+    expect(requests.some((request) => request.diagramType === 'GvStateDiagram')).toBe(false)
+  })
+
+  test('keeps generateDefault as the output target when diagramtype is also requested', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+    await installExampleRoutes(page)
+
+    await page.goto('/?example=MicrowaveOven2&generateDefault=Java&diagramtype=state')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await expect
+      .poll(() => getLastRequest(requests)?.language)
+      .toBe('Java')
+    await expect(page.getByTestId('generated-output-highlighted-all-code')).toContainText(
+      'InvoiceGenerated',
+      { timeout: 10_000 },
+    )
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText('Java Code')
+  })
+
+  test('opens a class diagram for an example URL with an invalid generateDefault', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+    await installExampleRoutes(page)
+
+    await page.goto('/?example=MicrowaveOven2&generateDefault=NotALanguage')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await expectOnlyClassDiagramRequests(page, requests, 'MicrowaveOven2')
+  })
+
+  test('switches to the menu category view for an example picked from the toolbar', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+    await installExampleRoutes(page)
+
+    await page.goto('/')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await pickToolbarExample(page, 'State Machines', 'Microwave Oven *')
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvStateDiagram')
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText(
+      'State Diagram (GraphViz SVG)',
+    )
+  })
+
+  test('switches to the menu category view for an example picked from the command palette', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+    await installExampleRoutes(page)
+
+    await page.goto('/')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByTestId('command-palette-input').fill('Ping Pong')
+    await page.getByTestId('command-item-example-ex-structure-pingpong').click()
+
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('StructureDiagram')
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText('Structure Diagram')
+  })
+
+  test('opens Auction from both the class and state example menus', async ({ page }) => {
+    const requests: GenerationRequest[] = []
+    await addPreferencesInitScript(page)
+    await installGenerationRoutes(page, requests)
+    // Both menus load the same Auction.ump, so the second pick only changes the
+    // view, which refreshes the diagram through /api/diagram.
+    await installDiagramRoutes(page, requests)
+    await installExampleRoutes(page)
+
+    await page.goto('/')
+    await expect(page.getByTestId('app-shell')).toBeVisible()
+    const examplesButton = page.getByTestId('app-toolbar').getByRole('button', { name: 'Examples' })
+
+    await pickToolbarExample(page, 'Class Diagrams', 'Auction *')
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvClassDiagram')
+    await expect(examplesButton).toContainText('Class Diagrams')
+
+    await pickToolbarExample(page, 'State Machines', 'Auction *')
+    await expect
+      .poll(() => getLastRequest(requests)?.diagramType)
+      .toBe('GvStateDiagram')
+    await expect(examplesButton).toContainText('State Machines')
+    await expect(page.getByTestId('generate-target-wrapper')).toContainText(
+      'State Diagram (GraphViz SVG)',
+    )
   })
 
   test('keeps all generated code visible by default and offers per-file tabs', async ({ page }) => {

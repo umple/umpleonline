@@ -39,6 +39,9 @@ backend/tmp/
 jars/*.jar
 jars/*.sha256
 
+# Examples (downloaded via make fetch-examples; the manifest stays tracked)
+examples/**/*.ump
+
 # Environment
 .env
 .env.*
